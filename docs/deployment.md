@@ -23,9 +23,26 @@ CI: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) — push/PR 시 py
 
 ## 2. Railway (Backend, 1차 권장)
 
+### 운영 URL (현재)
+
+| 항목 | 값 |
+|------|-----|
+| Vercel | `https://frontend-flame-tau-97.vercel.app` |
+| Railway API | `https://imc-dashboard-api-production-2929.up.railway.app` |
+| Railway 프로젝트 | `charming-transformation` / `imc-dashboard-api` |
+
+> 동일 repo에 Railway 프로젝트가 2개 있으면 **Vercel `vercel.json` destination**과 **Variables가 설정된 프로젝트**가 일치해야 합니다.
+
+### 배포 설정
+
+**프로젝트 A (권장, Root Directory 비움)** — `charming-transformation`  
+- `railway.toml` (repo root) → `dockerfilePath = "backend/Dockerfile"`
+
+**프로젝트 B (Root Directory = `backend`)** — `renewed-amazement`  
+- `backend/railway.toml` → `dockerfilePath = "Dockerfile.service-root"`
+
 1. GitHub repo 연결
-2. `railway.toml` / `backend/Dockerfile` 사용
-3. **Volume** 마운트: `/app/data`
+2. Volume 마운트: `/var/data` (운영) 또는 `/app/data`
 4. 환경변수:
 
 | 변수 | 값 |
