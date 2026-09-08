@@ -52,24 +52,53 @@ def _existing_dates(client: httpx.Client, api_base: str) -> set[str]:
     return set(response.json().get("dates", []))
 
 
+def _local_report_dates(db_path: Path) -> dict[str, str]:
+    """Map absolute PDF path string -> report_date (ISO)."""
+    if not db_path.exists():
+        return {}
+    import sqlite3
+
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute(
+        """
+        SELECT report_date, file_path
+        FROM report_metadata
+        WHERE file_path IS NOT NULL
+        """
+    ).fetchall()
+    conn.close()
+    mapping: dict[str, str] = {}
+    for row in rows:
+        if row["file_path"]:
+            mapping[str(Path(row["file_path"]).resolve())] = row["report_date"]
+    return mapping
+
+
 def _filter_pdfs_by_existing(
     pdfs: list[Path],
     existing_dates: set[str],
     *,
     only_new: bool,
+    local_db: Path | None = None,
 ) -> list[Path]:
     if not only_new:
         return pdfs
 
+    local_dates = _local_report_dates(local_db) if local_db else {}
     parser = ReportParser()
     selected: list[Path] = []
     for pdf_path in pdfs:
-        try:
-            report = parser.parse(str(pdf_path))
-            if report.report_date.isoformat() not in existing_dates:
-                selected.append(pdf_path)
-        except Exception as exc:  # noqa: BLE001
-            print(f"WARN parse skip {pdf_path.name}: {exc}")
+        resolved = str(pdf_path.resolve())
+        report_date = local_dates.get(resolved)
+        if report_date is None:
+            try:
+                report_date = parser.parse(str(pdf_path)).report_date.isoformat()
+            except Exception as exc:  # noqa: BLE001
+                print(f"WARN parse skip {pdf_path.name}: {exc}")
+                continue
+        if report_date not in existing_dates:
+            selected.append(pdf_path)
     return selected
 
 
@@ -101,7 +130,12 @@ def upload_pdfs(
 
         if only_new:
             before = len(pdfs)
-            pdfs = _filter_pdfs_by_existing(pdfs, existing, only_new=True)
+            pdfs = _filter_pdfs_by_existing(
+                pdfs,
+                existing,
+                only_new=True,
+                local_db=PROJECT_ROOT / "data" / "imc_dashboard.db",
+            )
             print(f"Only-new filter: {before} -> {len(pdfs)} file(s) to upload")
 
         if not pdfs:
