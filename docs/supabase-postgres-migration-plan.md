@@ -51,10 +51,16 @@ Postgres URL 설정 시 factory가 `NotImplementedError`를 반환하도록 가�
 ## 검증 체크리스트
 
 - [x] `003_postgres_initial.sql` Supabase에 적용 (2026-09-08)
-- [ ] `PostgresRepository` Protocol 100% 구현
-- [ ] pytest 전체 green (in-memory SQLite + integration Postgres)
-- [ ] PDF ingest → summary API 동일 결과
+- [x] `PostgresRepository` 구현 (`PostgresRepository` + `postgres_adapter.py`)
+- [x] pytest green (SQLite 68 + Postgres adapter unit tests)
+- [ ] PDF ingest → summary API 동일 결과 (Postgres integration)
 - [ ] connection pool / pgbouncer 설정
+
+## Railway Postgres 전환
+
+1. Supabase `DATABASE_URL` (Session mode, port 5432) Railway Variables에 설정
+2. `python backend/scripts/migrate_sqlite_to_postgres.py` 실행
+3. Railway Redeploy → `/api/health`에서 `"database": "postgres"` 확인
 
 ## Supabase 적용 결과 (2026-09-08)
 
