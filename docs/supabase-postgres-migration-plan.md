@@ -50,8 +50,23 @@ Postgres URL 설정 시 factory가 `NotImplementedError`를 반환하도록 가�
 
 ## 검증 체크리스트
 
-- [ ] `003_postgres_initial.sql` Supabase에 적용
+- [x] `003_postgres_initial.sql` Supabase에 적용 (2026-09-08)
 - [ ] `PostgresRepository` Protocol 100% 구현
 - [ ] pytest 전체 green (in-memory SQLite + integration Postgres)
 - [ ] PDF ingest → summary API 동일 결과
 - [ ] connection pool / pgbouncer 설정
+
+## Supabase 적용 결과 (2026-09-08)
+
+- Migration `imc_dashboard_initial` 적용 완료
+- 테이블 14개 생성 (`report_metadata` ~ `operation_period`)
+- **RLS 미설정**: 백엔드 전용 DB URL 사용 시 서버에서만 접근. Supabase anon key로 클라이언트 직접 접근 금지.
+
+데이터 마이그레이션 (로컬 SQLite → Supabase):
+
+```powershell
+pip install psycopg[binary]
+$env:DATABASE_URL = "postgresql://..."   # Supabase connection string
+python backend/scripts/migrate_sqlite_to_postgres.py
+python backend/scripts/migrate_sqlite_to_postgres.py --dry-run
+```

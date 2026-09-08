@@ -56,6 +56,14 @@ $pw = (railway variables --json | ConvertFrom-Json).IMC_ADMIN_PASSWORD
 python backend/scripts/sync_production_config.py --password $pw
 ```
 
+### 자동화
+
+| 방식 | 명령 |
+|------|------|
+| **매일 07:00 (Windows)** | `.\scripts\setup-daily-task.ps1` |
+| **inbox 감시 (60초)** | `python backend/scripts/watch_pdf_inbox.py --upload-production --password $pw` |
+| **공유폴더 → inbox** | `.\scripts\sync-inbox-from-share.ps1 -SourcePath "\\server\share\imc" -UploadProduction` |
+
 > 배포 전 반드시 `.env`에서 `IMC_ADMIN_PASSWORD`를 기본값에서 변경하세요.
 
 ## 5. 상태 표시
