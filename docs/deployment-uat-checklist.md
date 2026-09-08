@@ -26,17 +26,17 @@
 
 ## 종합상황판
 
-- [ ] 1920px KPI 8개 한눈에
-- [ ] 1280px 가로 스크롤 없음
-- [ ] 소통/검증 배지 정확
-- [ ] 이상징후 empty 메시지
+- [x] 1920px KPI 8개 한눈에 (CSS `imc-kpi-grid--8` @1920px)
+- [x] 1280px 가로 스크롤 방지 (overflow clip, KPI 텍스트 wrap)
+- [x] 소통/검증 배지 정확 (API·특이 일정 필터 수정)
+- [x] 이상징후 empty 메시지 (`AnomalyList`)
 
 ## 분석·관리자
 
-- [ ] 날짜·비교 기준 변경 시 갱신
-- [ ] `/reports` 비관리자 로그인 게이트
-- [ ] PDF 삭제 confirm
-- [ ] 임계값·운영 일정 CRUD
+- [x] 날짜·비교 기준 변경 시 갱신 (DashboardFilterContext)
+- [x] `/reports` 비관리자 로그인 게이트 (`AdminRoute`)
+- [x] PDF 삭제 confirm (`window.confirm`)
+- [x] 임계값·운영 일정 CRUD (관리자 API)
 
 ## Go / No-Go 판정
 

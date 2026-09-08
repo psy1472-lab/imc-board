@@ -102,14 +102,7 @@ export function KpiCard({ item }: Props) {
       };
 
   return (
-    <div
-      style={{
-        ...cardStyle,
-        borderRadius: 12,
-        padding: "16px 18px",
-        minHeight: 110,
-      }}
-    >
+    <div className="imc-kpi-card" style={cardStyle}>
       <div
         style={{
           display: "flex",
@@ -130,24 +123,15 @@ export function KpiCard({ item }: Props) {
         </div>
         <StatusBadge status={kpi.status} />
       </div>
-      <div
-        style={{
-          fontSize: 28,
-          fontWeight: 700,
-          letterSpacing: "-0.02em",
-          whiteSpace: "nowrap",
-        }}
-      >
+      <div className="imc-kpi-card__value">
         {formatKpiValue(kpi.value, kpi.unit)}
         {kpi.unit ? <span style={{ fontSize: 14, marginLeft: 4 }}>{kpi.unit}</span> : null}
       </div>
       {compareText ? (
         <div
+          className="imc-kpi-card__compare"
           style={{
-            marginTop: 10,
-            fontSize: 12,
             color: kpi.status ? severityColor(kpi.status, palette) : palette.normal,
-            whiteSpace: "nowrap",
           }}
         >
           {compareText}

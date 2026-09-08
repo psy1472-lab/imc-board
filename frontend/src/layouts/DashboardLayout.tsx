@@ -193,18 +193,9 @@ export function DashboardLayout() {
       </aside>
 
       <main className="imc-main">
-        <header
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: 20,
-            gap: 12,
-            flexWrap: "wrap",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-            <h1 style={{ margin: 0, fontSize: 28 }}>중부권IMC 통합관제 대시보드</h1>
+        <header className="imc-main-header">
+          <div className="imc-main-header__title-row">
+            <h1 className="imc-main-header__title">중부권IMC 통합관제 대시보드</h1>
             {selectedDate ? (
               <div style={{ color: palette.muted, fontSize: 15 }}>{formatDateWithWeekday(selectedDate)}</div>
             ) : null}

@@ -54,6 +54,7 @@ select, input {
 .imc-dashboard-shell {
   display: flex;
   min-height: 100vh;
+  overflow-x: clip;
 }
 
 .imc-sidebar {
@@ -89,6 +90,54 @@ select, input {
   flex: 1;
   min-width: 0;
   padding: 24px;
+  overflow-x: clip;
+}
+
+.imc-main-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.imc-main-header__title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  min-width: 0;
+  flex: 1 1 320px;
+}
+
+.imc-main-header__title {
+  margin: 0;
+  font-size: clamp(20px, 2.2vw, 28px);
+  line-height: 1.2;
+}
+
+.imc-kpi-card {
+  border-radius: 12px;
+  padding: 16px 18px;
+  min-height: 110px;
+  min-width: 0;
+}
+
+.imc-kpi-card__value {
+  font-size: clamp(20px, 2.1vw, 28px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+.imc-kpi-card__compare {
+  margin-top: 10px;
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 /* KPI grids */
@@ -115,9 +164,13 @@ select, input {
   .imc-kpi-grid--8 {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
+
+  .imc-main {
+    padding: 20px;
+  }
 }
 
-@media (min-width: 1600px) {
+@media (min-width: 1920px) {
   .imc-kpi-grid--6 {
     grid-template-columns: repeat(6, minmax(0, 1fr));
   }
