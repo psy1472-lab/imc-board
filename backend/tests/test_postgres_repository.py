@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import os
 import unittest
+from decimal import Decimal
 
-from infrastructure.db.postgres_adapter import translate_sql
+from infrastructure.db.postgres_adapter import _normalize_value, translate_sql
 
 
 class PostgresAdapterTests(unittest.TestCase):
@@ -26,6 +27,10 @@ class PostgresAdapterTests(unittest.TestCase):
         """
         translated = translate_sql(sql)
         self.assertIn("RETURNING id", translated)
+
+    def test_normalize_decimal_to_float(self) -> None:
+        self.assertEqual(_normalize_value(Decimal("308.5")), 308.5)
+        self.assertIsInstance(_normalize_value(Decimal("12.0")), float)
 
 
 @unittest.skipUnless(

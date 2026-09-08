@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Any
 
 import psycopg
@@ -12,6 +13,8 @@ from psycopg.rows import dict_row
 
 
 def _normalize_value(value: Any) -> Any:
+    if isinstance(value, Decimal):
+        return float(value)
     if isinstance(value, datetime):
         return value.isoformat()
     if isinstance(value, date):
