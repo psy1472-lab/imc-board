@@ -31,24 +31,18 @@ CI: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) — push/PR 시 py
 | Railway API | `https://imc-dashboard-api-production-2929.up.railway.app` |
 | Railway 프로젝트 | `charming-transformation` / `imc-dashboard-api` |
 
-> 동일 repo에 Railway 프로젝트가 2개 있으면 **Vercel `vercel.json` destination**과 **Variables가 설정된 프로젝트**가 일치해야 합니다.
-
 ### 배포 설정
 
-**프로젝트 A (권장, Root Directory 비움)** — `charming-transformation`  
-- `railway.toml` (repo root) → `dockerfilePath = "backend/Dockerfile"`
-
-**프로젝트 B (Root Directory = `backend`)** — `renewed-amazement`  
-- `backend/railway.toml` → `dockerfilePath = "Dockerfile.service-root"`
-
-1. GitHub repo 연결
-2. Volume 마운트: `/var/data` (운영) 또는 `/app/data`
-4. 환경변수:
+1. GitHub repo 연결 (`psy1472-lab/imc-board`, branch `main`)
+2. **Root Directory**: 비움
+3. `railway.toml` (repo root) → `dockerfilePath = "backend/Dockerfile"`
+4. Volume 마운트: `/var/data`
+5. 환경변수:
 
 | 변수 | 값 |
 |------|-----|
-| `DATA_DIR` | `/app/data` |
-| `DATABASE_URL` | `sqlite:////app/data/imc_dashboard.db` |
+| `DATA_DIR` | `/var/data` |
+| `DATABASE_URL` | `sqlite:////var/data/imc_dashboard.db` |
 | `IMC_ADMIN_PASSWORD` | (강력한 비밀번호) |
 | `CORS_ORIGINS` | `https://<vercel-app>.vercel.app,*.vercel.app` 또는 |
 | `CORS_ALLOW_VERCEL` | `true` (모든 `*.vercel.app` 허용) |

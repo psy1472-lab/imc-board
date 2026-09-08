@@ -13,3 +13,5 @@ __pycache__/
 *.db-shm
 backend/data/models/*.pkl
 .DS_Store
+
+.vercel/
