@@ -11,18 +11,21 @@ from application.briefing_service import BriefingService
 from application.report_parser import ReportParser
 from infrastructure.config import (
     max_upload_bytes,
+    resolve_cors_origin_regex,
+    resolve_cors_origins,
     resolve_model_cache_path,
     resolve_upload_dir,
-    resolve_cors_origins,
 )
 from infrastructure.db.repository_factory import create_repository
 from infrastructure.upload import sanitize_upload_filename
 from interfaces.api.admin_auth import get_admin_password, issue_admin_token, require_admin
 
 app = FastAPI(title="IMC Operations Dashboard API", version="0.1.0")
+_cors_regex = resolve_cors_origin_regex()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=resolve_cors_origins(),
+    allow_origin_regex=_cors_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

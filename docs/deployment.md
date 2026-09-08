@@ -33,7 +33,8 @@ CI: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) — push/PR 시 py
 | `DATA_DIR` | `/app/data` |
 | `DATABASE_URL` | `sqlite:////app/data/imc_dashboard.db` |
 | `IMC_ADMIN_PASSWORD` | (강력한 비밀번호) |
-| `CORS_ORIGINS` | `https://<vercel-app>.vercel.app` |
+| `CORS_ORIGINS` | `https://<vercel-app>.vercel.app,*.vercel.app` 또는 |
+| `CORS_ALLOW_VERCEL` | `true` (모든 `*.vercel.app` 허용) |
 | `PORT` | (Railway 자동) |
 
 5. Health check: `GET /api/health`
@@ -47,9 +48,21 @@ CI: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) — push/PR 시 py
 1. Import GitHub repo
 2. **Root Directory**: `frontend`
 3. Build: `npm run build`, Output: `dist`
-4. Env: `VITE_API_BASE=https://<railway-host>`
 
-`frontend/vercel.json` — SPA rewrite 포함.
+### API 연결 (두 가지 중 하나)
+
+**A. Vercel 프록시 (권장, `VITE_API_BASE` 불필요)**  
+[`frontend/vercel.json`](../frontend/vercel.json)에서 `/api/*` → Railway URL로 rewrite.  
+Railway URL이 다르면 `vercel.json`의 `destination`을 수정 후 재배포.
+
+**B. 직접 호출**  
+Vercel 환경변수: `VITE_API_BASE=https://<railway-host>`  
+Railway에 `CORS_ALLOW_VERCEL=true` 또는 `CORS_ORIGINS=*.vercel.app` 설정.
+
+### 데이터 없음 vs 연결 오류
+
+- **「보고서 날짜를 불러오지 못했습니다」** → API 연결/CORS 문제
+- **「보고서가 없습니다」** → 연결 성공, Railway DB에 PDF 미업로드 (관리자 메뉴에서 업로드)
 
 ## 5. Supabase (2차 — Postgres)
 

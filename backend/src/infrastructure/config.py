@@ -41,7 +41,16 @@ def resolve_cors_origins() -> list[str]:
     raw = os.getenv("CORS_ORIGINS", "").strip()
     if not raw:
         return ["http://localhost:5173", "http://127.0.0.1:5173"]
-    return [origin.strip() for origin in raw.split(",") if origin.strip()]
+    origins = [origin.strip() for origin in raw.split(",") if origin.strip()]
+    return [origin for origin in origins if origin != "*.vercel.app"]
+
+
+def resolve_cors_origin_regex() -> str | None:
+    raw = os.getenv("CORS_ORIGINS", "").strip()
+    if "*.vercel.app" in raw or os.getenv("CORS_ALLOW_VERCEL", "").lower() in {"1", "true", "yes"}:
+        return r"https://.*\.vercel\.app"
+    explicit = os.getenv("CORS_ORIGIN_REGEX", "").strip()
+    return explicit or None
 
 
 def max_upload_bytes() -> int:

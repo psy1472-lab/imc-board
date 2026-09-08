@@ -14,7 +14,22 @@ import type {
 import type { SystemStatus, ThresholdConfig } from "../types/system";
 import type { OperationPeriod, OperationPeriodType } from "../types/operationPeriod";
 import { adminAuthHeaders } from "./adminToken";
-const API_BASE = import.meta.env.VITE_API_BASE ?? "";
+
+const API_BASE = (import.meta.env.VITE_API_BASE ?? "").replace(/\/$/, "");
+
+async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
+  const url = `${API_BASE}${path}`;
+  try {
+    return await fetch(url, init);
+  } catch {
+    if (!API_BASE && import.meta.env.PROD) {
+      throw new Error(
+        "API 서버에 연결할 수 없습니다. Vercel 환경변수 VITE_API_BASE 또는 /api 프록시 설정을 확인해 주세요.",
+      );
+    }
+    throw new Error("API 서버에 연결할 수 없습니다. 백엔드가 실행 중인지 확인해 주세요.");
+  }
+}
 
 async function readApiError(res: Response, fallback: string): Promise<string> {
   try {
@@ -39,13 +54,19 @@ async function readApiError(res: Response, fallback: string): Promise<string> {
 }
 
 export async function fetchReportDates(): Promise<string[]> {
-  const res = await fetch(`${API_BASE}/api/reports/dates`);
+  const res = await apiFetch("/api/reports/dates");
+  if (!res.ok) {
+    throw new Error(await readApiError(res, "보고서 날짜를 불러오지 못했습니다."));
+  }
   const data = await res.json();
   return data.dates ?? [];
 }
 
 export async function fetchReportDateMetadata(): Promise<ReportDateMeta[]> {
-  const res = await fetch(`${API_BASE}/api/reports/dates`);
+  const res = await apiFetch("/api/reports/dates");
+  if (!res.ok) {
+    throw new Error(await readApiError(res, "보고서 날짜를 불러오지 못했습니다."));
+  }
   const data = await res.json();
   return data.metadata ?? [];
 }
