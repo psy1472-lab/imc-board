@@ -33,8 +33,10 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
       sessionStorage.setItem(ADMIN_SESSION_KEY, "true");
       setIsAdmin(true);
       return true;
-    } catch {
-      setError("관리자 비밀번호가 올바르지 않습니다.");
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "관리자 인증에 실패했습니다. 잠시 후 다시 시도해 주세요.";
+      setError(message);
       return false;
     } finally {
       setLoading(false);

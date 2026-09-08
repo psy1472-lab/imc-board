@@ -63,13 +63,12 @@ npm run dev
 
 ## Railway (Backend)
 
-**방법 A (권장)** — Root Directory **비움**:
-- Dockerfile: 루트 `Dockerfile`
-- `railway.toml` 자동 적용
+Railway 기본 설정(스크린샷 기준):
+- **Root Directory**: 비움
+- **Dockerfile path**: `backend/Dockerfile`
+- 빌드 컨텍스트 = repo root → `backend/migrations` 사용 (`supabase/migrations` 아님)
 
-**방법 B** — Root Directory **`backend`**:
-- Dockerfile: `backend/Dockerfile`
-- `backend/railway.toml` 자동 적용
+**Redeploy** 시 최신 커밋이 반영되는지 확인 (Build Logs에 `COPY backend/migrations` 표시).
 
 공통 env:
 - `DATA_DIR=/app/data`, Volume `/app/data`

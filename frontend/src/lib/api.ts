@@ -276,12 +276,15 @@ export async function deleteOperationPeriod(periodId: number): Promise<void> {
 }
 
 export async function verifyAdminPassword(password: string): Promise<{ ok: boolean; token: string }> {
-  const res = await fetch(`${API_BASE}/api/admin/verify`, {
+  const res = await apiFetch("/api/admin/verify", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ password }),
+    body: JSON.stringify({ password: password.trim() }),
   });
   if (!res.ok) {
+    if (res.status === 401) {
+      throw new Error("관리자 비밀번호가 올바르지 않습니다.");
+    }
     throw new Error(await readApiError(res, "관리자 인증에 실패했습니다."));
   }
   return res.json();

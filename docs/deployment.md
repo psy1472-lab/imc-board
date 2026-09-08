@@ -64,6 +64,29 @@ Railway에 `CORS_ALLOW_VERCEL=true` 또는 `CORS_ORIGINS=*.vercel.app` 설정.
 - **「보고서 날짜를 불러오지 못했습니다」** → API 연결/CORS 문제
 - **「보고서가 없습니다」** → 연결 성공, Railway DB에 PDF 미업로드 (관리자 메뉴에서 업로드)
 
+### 관리자 비밀번호 배포 확인
+
+Public Railway URL과 Vercel이 같은 백엔드를 보는지 `GET /api/health`로 확인합니다.
+
+```json
+{
+  "status": "ok",
+  "adminAuth": {
+    "envVarSet": true,
+    "usingFallback": false,
+    "passwordLength": 12
+  }
+}
+```
+
+| `adminAuth` | 의미 |
+|-------------|------|
+| `usingFallback: true` | `IMC_ADMIN_PASSWORD` 미주입 → 코드 기본값 사용 중. Railway **Public domain 서비스** Variables 확인 후 Redeploy |
+| `envVarSet: true`, `usingFallback: false` | 환경변수 정상 주입 |
+| Vercel `/api/health`와 Railway 직접 `/api/health`의 `adminAuth`가 다름 | `vercel.json` destination 또는 `VITE_API_BASE`가 다른 백엔드를 가리킴 |
+
+Railway Variables는 **Public domain이 연결된 서비스**의 **Production** 환경에 설정합니다.
+
 ## 5. Supabase (2차 — Postgres)
 
 1. 프로젝트 생성 → `DATABASE_URL` 복사
@@ -74,7 +97,7 @@ Railway에 `CORS_ALLOW_VERCEL=true` 또는 `CORS_ORIGINS=*.vercel.app` 설정.
 
 | 변수 | Vercel | Railway/Render | Supabase |
 |------|--------|----------------|----------|
-| `VITE_API_BASE` | 필수 | - | - |
+| `VITE_API_BASE` | 프록시 사용 시 불필요 / 직접 호출 시 필수 | - | - |
 | `IMC_ADMIN_PASSWORD` | - | 필수 | - |
 | `DATABASE_URL` | - | 필수 | Dashboard |
 | `CORS_ORIGINS` | - | Vercel URL | - |

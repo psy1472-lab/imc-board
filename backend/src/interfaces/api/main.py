@@ -18,7 +18,12 @@ from infrastructure.config import (
 )
 from infrastructure.db.repository_factory import create_repository
 from infrastructure.upload import sanitize_upload_filename
-from interfaces.api.admin_auth import get_admin_password, issue_admin_token, require_admin
+from interfaces.api.admin_auth import (
+    get_admin_auth_status,
+    get_admin_password,
+    issue_admin_token,
+    require_admin,
+)
 
 app = FastAPI(title="IMC Operations Dashboard API", version="0.1.0")
 _cors_regex = resolve_cors_origin_regex()
@@ -46,6 +51,7 @@ def health():
         return {
             "status": "ok",
             "database": db_status,
+            "adminAuth": get_admin_auth_status(),
         }
     except Exception as exc:
         raise HTTPException(status_code=503, detail="database unavailable") from exc
@@ -55,6 +61,8 @@ def health():
 def verify_admin(payload: dict = Body(...)):
     expected_password = get_admin_password()
     password = payload.get("password")
+    if isinstance(password, str):
+        password = password.strip()
     if password != expected_password:
         raise HTTPException(status_code=401, detail="invalid admin password")
     return {"ok": True, "token": issue_admin_token(password)}

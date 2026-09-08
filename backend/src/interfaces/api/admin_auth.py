@@ -6,6 +6,7 @@ import os
 from fastapi import Header, HTTPException
 
 ADMIN_PASSWORD_ENV = "IMC_ADMIN_PASSWORD"
+_FALLBACK_PASSWORD = "imc-admin"
 
 
 def admin_token_for_password(password: str) -> str:
@@ -13,7 +14,21 @@ def admin_token_for_password(password: str) -> str:
 
 
 def get_admin_password() -> str:
-    return os.getenv(ADMIN_PASSWORD_ENV, "imc-admin")
+    raw = os.getenv(ADMIN_PASSWORD_ENV)
+    if raw is None:
+        return _FALLBACK_PASSWORD
+    return raw.strip()
+
+
+def get_admin_auth_status() -> dict[str, bool | int]:
+    raw = os.getenv(ADMIN_PASSWORD_ENV)
+    env_set = raw is not None
+    effective = raw.strip() if env_set else _FALLBACK_PASSWORD
+    return {
+        "envVarSet": env_set,
+        "usingFallback": not env_set,
+        "passwordLength": len(effective),
+    }
 
 
 def issue_admin_token(password: str) -> str:
