@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -17,6 +18,22 @@ from domain.entities import ParsedReport
 from domain.hour_slots import HOUR_SLOTS, format_hour_label, normalize_hour_slot
 
 
+def _resolve_migrations_dir() -> Path:
+    if env_dir := os.getenv("MIGRATIONS_DIR", "").strip():
+        return Path(env_dir)
+
+    repo_root = Path(__file__).resolve().parents[4]
+    backend_root = Path(__file__).resolve().parents[3]
+    for candidate in (
+        repo_root / "supabase" / "migrations",
+        repo_root / "backend" / "migrations",
+        backend_root / "migrations",
+    ):
+        if candidate.exists():
+            return candidate
+    return repo_root / "supabase" / "migrations"
+
+
 class SqliteRepository:
     def __init__(self, db_path: str) -> None:
         self.db_path = db_path
@@ -31,7 +48,7 @@ class SqliteRepository:
         return conn
 
     def _init_schema(self) -> None:
-        migrations_dir = Path(__file__).resolve().parents[4] / "supabase" / "migrations"
+        migrations_dir = _resolve_migrations_dir()
         with self._connect() as conn:
             for migration_name in ("001_initial_schema.sql", "002_operation_period.sql"):
                 migration_path = migrations_dir / migration_name

@@ -1,12 +1,16 @@
 [build]
 builder = "DOCKERFILE"
-dockerfilePath = "backend/Dockerfile"
+# Railway Root Directory = backend 일 때
+dockerfilePath = "Dockerfile"
 
 [deploy]
 healthcheckPath = "/api/health"
 healthcheckTimeout = 120
 restartPolicyType = "ON_FAILURE"
 
-# Mount persistent volume at /app/data in Railway dashboard:
-# DATABASE_URL=sqlite:////app/data/imc_dashboard.db
-# DATA_DIR=/app/data
+# Railway 서비스 설정:
+# - Root Directory: backend
+# - Volume mount: /app/data
+# - DATABASE_URL=sqlite:////app/data/imc_dashboard.db
+# - DATA_DIR=/app/data
+# - CORS_ORIGINS=https://<your-vercel-app>.vercel.app
