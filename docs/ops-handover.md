@@ -43,6 +43,13 @@
 - **임계값 변경**: 시스템 관리 → 저장
 - **운영 특이 일정**: 보고서 페이지 하단 → 추가/수정/삭제
 
+로컬에서 설정한 특이 일정·임계값을 프로덕션에 반영할 때:
+
+```powershell
+$pw = (railway variables --json | ConvertFrom-Json).IMC_ADMIN_PASSWORD
+python backend/scripts/sync_production_config.py --password $pw
+```
+
 > 배포 전 반드시 `.env`에서 `IMC_ADMIN_PASSWORD`를 기본값에서 변경하세요.
 
 ## 5. 상태 표시

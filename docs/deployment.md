@@ -75,6 +75,29 @@ Railway에 `CORS_ALLOW_VERCEL=true` 또는 `CORS_ORIGINS=*.vercel.app` 설정.
 - **「보고서 날짜를 불러오지 못했습니다」** → API 연결/CORS 문제
 - **「보고서가 없습니다」** → 연결 성공, Railway DB에 PDF 미업로드 (관리자 메뉴에서 업로드)
 
+### 프로덕션 PDF 일괄 업로드 (로컬 → Railway)
+
+로컬 `data/uploads/`에 PDF가 있을 때:
+
+```powershell
+$pw = (railway variables --json | ConvertFrom-Json).IMC_ADMIN_PASSWORD
+python backend/scripts/upload_production_pdfs.py --password $pw
+```
+
+업로드 후 자동 UAT:
+
+```powershell
+python backend/scripts/smoke_production_uat.py --password $pw
+```
+
+로컬 운영 설정(특이 일정·임계값) 동기화:
+
+```powershell
+python backend/scripts/sync_production_config.py --password $pw
+```
+
+GitHub Actions `production-smoke.yml`이 6시간마다 health·summary·특이 일정을 검증합니다.
+
 ### 관리자 비밀번호 배포 확인
 
 Public Railway URL과 Vercel이 같은 백엔드를 보는지 `GET /api/health`로 확인합니다.
