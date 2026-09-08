@@ -1,6 +1,12 @@
 name: Production Smoke
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/production-smoke.yml"
+      - "backend/scripts/production_smoke_public.py"
+      - "backend/scripts/smoke_production_uat.py"
   schedule:
     - cron: "0 */6 * * *"
   workflow_dispatch:
@@ -23,48 +29,21 @@ jobs:
           PRODUCTION_API: https://imc-dashboard-api-production-2929.up.railway.app
           PRODUCTION_VERCEL: https://frontend-flame-tau-97.vercel.app
         run: |
-          python - <<'PY'
-          import os
-          import sys
-          import httpx
+          python scripts/production_smoke_public.py \
+            --api "$PRODUCTION_API" \
+            --vercel "$PRODUCTION_VERCEL"
 
-          api = os.environ["PRODUCTION_API"].rstrip("/")
-          vercel = os.environ["PRODUCTION_VERCEL"].rstrip("/")
-          failures = []
-
-          with httpx.Client(timeout=30.0) as client:
-              for label, base in [("railway", api), ("vercel", vercel)]:
-                  health = client.get(f"{base}/api/health")
-                  body = health.json()
-                  if health.status_code != 200 or body.get("status") != "ok":
-                      failures.append(f"{label} health failed")
-                  elif body.get("database", {}).get("reportCount", 0) < 1:
-                      failures.append(f"{label} reportCount is zero")
-
-              dates = client.get(f"{api}/api/reports/dates").json().get("dates", [])
-              if not dates:
-                  failures.append("no report dates")
-              else:
-                  latest = dates[-1]
-                  summary = client.get(f"{api}/api/dashboard/summary", params={"date": latest})
-                  kpis = summary.json().get("kpis", [])
-                  total = next((k for k in kpis if k.get("key") == "total_volume"), None)
-                  if summary.status_code != 200 or not total or total.get("value") is None:
-                      failures.append(f"summary missing total_volume for {latest}")
-
-              periods = client.get(f"{api}/api/operation-periods").json().get("periods", [])
-              if not periods:
-                  failures.append("operation periods not configured")
-
-          if failures:
-              print("FAIL:", "; ".join(failures))
-              sys.exit(1)
-          print("PASS: production smoke")
-          PY
-
-      - name: Admin smoke (optional)
-        if: ${{ secrets.IMC_ADMIN_PASSWORD != '' }}
+      - name: Admin production smoke
         env:
           PRODUCTION_API: https://imc-dashboard-api-production-2929.up.railway.app
+          PRODUCTION_VERCEL: https://frontend-flame-tau-97.vercel.app
           IMC_ADMIN_PASSWORD: ${{ secrets.IMC_ADMIN_PASSWORD }}
-        run: python scripts/smoke_production_uat.py --password "$IMC_ADMIN_PASSWORD"
+        run: |
+          if [ -z "$IMC_ADMIN_PASSWORD" ]; then
+            echo "Skipping admin smoke (IMC_ADMIN_PASSWORD secret not configured)"
+            exit 0
+          fi
+          python scripts/smoke_production_uat.py \
+            --api "$PRODUCTION_API" \
+            --vercel "$PRODUCTION_VERCEL" \
+            --password "$IMC_ADMIN_PASSWORD"

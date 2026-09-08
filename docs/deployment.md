@@ -84,6 +84,12 @@ $pw = (railway variables --json | ConvertFrom-Json).IMC_ADMIN_PASSWORD
 python backend/scripts/upload_production_pdfs.py --password $pw
 ```
 
+**신규 PDF만** (일일 운영 권장):
+
+```powershell
+python backend/scripts/upload_production_pdfs.py --password $pw --only-new
+```
+
 업로드 후 자동 UAT:
 
 ```powershell

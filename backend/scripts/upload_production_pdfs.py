@@ -10,6 +10,12 @@ from pathlib import Path
 
 import httpx
 
+BACKEND_SRC = Path(__file__).resolve().parents[1] / "src"
+if str(BACKEND_SRC) not in sys.path:
+    sys.path.insert(0, str(BACKEND_SRC))
+
+from application.report_parser import ReportParser
+
 DEFAULT_API = "https://imc-dashboard-api-production-2929.up.railway.app"
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -46,6 +52,27 @@ def _existing_dates(client: httpx.Client, api_base: str) -> set[str]:
     return set(response.json().get("dates", []))
 
 
+def _filter_pdfs_by_existing(
+    pdfs: list[Path],
+    existing_dates: set[str],
+    *,
+    only_new: bool,
+) -> list[Path]:
+    if not only_new:
+        return pdfs
+
+    parser = ReportParser()
+    selected: list[Path] = []
+    for pdf_path in pdfs:
+        try:
+            report = parser.parse(str(pdf_path))
+            if report.report_date.isoformat() not in existing_dates:
+                selected.append(pdf_path)
+        except Exception as exc:  # noqa: BLE001
+            print(f"WARN parse skip {pdf_path.name}: {exc}")
+    return selected
+
+
 def upload_pdfs(
     pdf_dir: Path,
     api_base: str,
@@ -53,6 +80,7 @@ def upload_pdfs(
     *,
     limit: int | None = None,
     skip_existing: bool = True,
+    only_new: bool = False,
 ) -> int:
     pdfs = sorted(pdf_dir.glob("*.pdf"))
     if limit is not None:
@@ -69,7 +97,16 @@ def upload_pdfs(
     with httpx.Client() as client:
         token = _admin_token(client, api_base, password)
         headers = {"Authorization": f"Bearer {token}"}
-        existing = _existing_dates(client, api_base) if skip_existing else set()
+        existing = _existing_dates(client, api_base) if skip_existing or only_new else set()
+
+        if only_new:
+            before = len(pdfs)
+            pdfs = _filter_pdfs_by_existing(pdfs, existing, only_new=True)
+            print(f"Only-new filter: {before} -> {len(pdfs)} file(s) to upload")
+
+        if not pdfs:
+            print("Nothing to upload.")
+            return 0
 
         for index, pdf_path in enumerate(pdfs, start=1):
             print(f"[{index}/{len(pdfs)}] {pdf_path.name}", end=" ... ", flush=True)
@@ -129,6 +166,11 @@ def main() -> None:
     )
     parser.add_argument("--limit", type=int, default=None, help="Max files to upload")
     parser.add_argument(
+        "--only-new",
+        action="store_true",
+        help="Parse PDFs locally and upload only report dates missing on production",
+    )
+    parser.add_argument(
         "--no-skip-existing",
         action="store_true",
         help="Upload even if report date already exists",
@@ -143,6 +185,7 @@ def main() -> None:
             password,
             limit=args.limit,
             skip_existing=not args.no_skip_existing,
+            only_new=args.only_new,
         )
     )
 

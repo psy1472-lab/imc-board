@@ -7,6 +7,7 @@ from domain.operation_period import (
     compute_historical_no_parcel_avg,
     compute_historical_same_weekday_in_period,
     compute_historical_special_period_avg,
+    get_operation_periods_for_date,
     no_parcel_period_features,
 )
 from domain.volume_ml_forecast import resolve_special_communication_flag
@@ -165,6 +166,26 @@ class OperationPeriodTests(unittest.TestCase):
         day_index, days_until = no_parcel_period_features(date(2026, 8, 14), periods)
         self.assertEqual(day_index, 0.0)
         self.assertEqual(days_until, 1.0)
+
+    def test_get_operation_periods_for_date_excludes_non_overlapping_periods(self):
+        periods = [
+            {
+                "periodType": "post_shopping_discount",
+                "startDate": "2026-09-01",
+                "endDate": "2026-09-27",
+            },
+            {
+                "periodType": "special_communication",
+                "startDate": "2026-09-14",
+                "endDate": "2026-09-29",
+            },
+        ]
+        active = get_operation_periods_for_date(date(2026, 9, 7), periods)
+        self.assertEqual(len(active), 1)
+        self.assertEqual(active[0]["periodType"], "post_shopping_discount")
+
+        active_both = get_operation_periods_for_date(date(2026, 9, 20), periods)
+        self.assertEqual(len(active_both), 2)
 
 
 if __name__ == "__main__":
