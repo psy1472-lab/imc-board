@@ -103,6 +103,16 @@ _UPSERT_SUFFIX: dict[str, str] = {
             unread_count = EXCLUDED.unread_count,
             unread_rate = EXCLUDED.unread_rate
     """,
+    "daily_forecast": """
+        ON CONFLICT (report_date) DO UPDATE SET
+            target_date = EXCLUDED.target_date,
+            forecast_volume = EXCLUDED.forecast_volume,
+            forecast_national_volume = EXCLUDED.forecast_national_volume,
+            method = EXCLUDED.method,
+            method_label = EXCLUDED.method_label,
+            forecast_text = EXCLUDED.forecast_text,
+            generated_at = EXCLUDED.generated_at
+    """,
 }
 
 

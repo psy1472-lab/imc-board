@@ -9,7 +9,7 @@ import { NAV_ITEMS } from "../config/navigation";
 import { useAdminAuth } from "../context/AdminAuthContext";
 import { useDashboardFilters } from "../context/DashboardFilterContext";
 import { useTheme } from "../context/ThemeContext";
-import { fetchDashboardSummary, fetchOperationPeriods, fetchReportValidation } from "../lib/api";
+import { fetchOperationPeriods, fetchReportValidation } from "../lib/api";
 import { COMPARE_OPTIONS } from "../lib/dashboardCompare";
 import { formatDateWithWeekday } from "../lib/dateFormat";
 import { getActiveOperationPeriods } from "../lib/operationPeriodMatch";
@@ -21,7 +21,8 @@ export function DashboardLayout() {
   const location = useLocation();
   const { palette } = useTheme();
   const { isAdmin, logout } = useAdminAuth();
-  const { dates, selectedDate, setSelectedDate, compare, setCompareBasis, error } = useDashboardFilters();
+  const { dates, selectedDate, setSelectedDate, compare, setCompareBasis, error, loadDashboardSummary } =
+    useDashboardFilters();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [validationStatus, setValidationStatus] = useState<{
     severity: "PASS" | "WARNING" | "FAIL";
@@ -53,7 +54,7 @@ export function DashboardLayout() {
       setCommunicationStatus(null);
       return;
     }
-    fetchDashboardSummary(selectedDate, "prev_day")
+    loadDashboardSummary(selectedDate, "prev_day")
       .then((summary) =>
         setCommunicationStatus({
           label: summary.meta.communicationStatusLabel,
@@ -61,7 +62,7 @@ export function DashboardLayout() {
         }),
       )
       .catch(() => setCommunicationStatus(null));
-  }, [selectedDate]);
+  }, [selectedDate, loadDashboardSummary]);
 
   useEffect(() => {
     if (!selectedDate) {

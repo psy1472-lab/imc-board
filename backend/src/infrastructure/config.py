@@ -31,6 +31,10 @@ def resolve_model_cache_path() -> str:
     return str(base / "models" / "volume_forecast_lgb.pkl")
 
 
+def ml_inference_mode_fast() -> bool:
+    return os.getenv("ML_INFERENCE_MODE", "").strip().lower() == "fast"
+
+
 def resolve_upload_dir() -> Path:
     data_dir = os.getenv("DATA_DIR", "").strip()
     base = Path(data_dir) if data_dir else project_root() / "data"

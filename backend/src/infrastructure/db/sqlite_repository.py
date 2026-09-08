@@ -50,7 +50,11 @@ class SqliteRepository:
     def _init_schema(self) -> None:
         migrations_dir = _resolve_migrations_dir()
         with self._connect() as conn:
-            for migration_name in ("001_initial_schema.sql", "002_operation_period.sql"):
+            for migration_name in (
+                "001_initial_schema.sql",
+                "002_operation_period.sql",
+                "003_daily_forecast.sql",
+            ):
                 migration_path = migrations_dir / migration_name
                 if migration_path.exists():
                     with open(migration_path, encoding="utf-8") as file:
@@ -62,7 +66,7 @@ class SqliteRepository:
             conn.commit()
 
     def get_health_status(self) -> dict:
-        migrations = ["001_initial_schema.sql", "002_operation_period.sql"]
+        migrations = ["001_initial_schema.sql", "002_operation_period.sql", "003_daily_forecast.sql"]
         with self._connect() as conn:
             report_count = conn.execute("SELECT COUNT(*) FROM report_metadata").fetchone()[0]
             latest = conn.execute(
@@ -284,6 +288,9 @@ class SqliteRepository:
             conn.commit()
 
         self._rebuild_comparisons(report.report_date)
+        from infrastructure.cache.report_cache import get_report_read_cache
+
+        get_report_read_cache().invalidate_report(report_date)
 
     def _national_processing_rate(
         self, total_volume: int | float | None, national_volume: int | float | None
@@ -570,6 +577,15 @@ class SqliteRepository:
         }
 
     def get_volume_analysis(self, report_date: str) -> dict:
+        from infrastructure.cache.report_cache import cached_report_read
+
+        return cached_report_read(
+            "volume_analysis",
+            report_date,
+            lambda: self._get_volume_analysis_uncached(report_date),
+        )
+
+    def _get_volume_analysis_uncached(self, report_date: str) -> dict:
         with self._connect() as conn:
             summary = conn.execute(
                 "SELECT * FROM daily_summary WHERE report_date = ?",
@@ -2327,6 +2343,15 @@ class SqliteRepository:
         }
 
     def get_volume_forecast_context(self, report_date: str) -> dict:
+        from infrastructure.cache.report_cache import cached_report_read
+
+        return cached_report_read(
+            "volume_forecast_context",
+            report_date,
+            lambda: self._get_volume_forecast_context_uncached(report_date),
+        )
+
+    def _get_volume_forecast_context_uncached(self, report_date: str) -> dict:
         """전망 대상일(day_type)에 맞는 과거 물량만 추출해 Seasonal Naive 입력값을 만든다."""
         report_day = date.fromisoformat(report_date)
         target = resolve_forecast_target_date(report_day)
@@ -2454,6 +2479,15 @@ class SqliteRepository:
         }
 
     def get_volume_ml_timeseries(self, through_date: str) -> list[dict]:
+        from infrastructure.cache.report_cache import cached_report_read
+
+        return cached_report_read(
+            "volume_ml_timeseries",
+            through_date,
+            lambda: self._get_volume_ml_timeseries_uncached(through_date),
+        )
+
+    def _get_volume_ml_timeseries_uncached(self, through_date: str) -> list[dict]:
         with self._connect() as conn:
             rows = conn.execute(
                 """
@@ -2550,3 +2584,59 @@ class SqliteRepository:
             slot = normalize_hour_slot(str(row["hour_slot"]))
             indexed[slot] = row
         return {slot: indexed.get(slot) for slot in HOUR_SLOTS}
+
+    def save_daily_forecast(
+        self,
+        report_date: str,
+        *,
+        target_date: str,
+        forecast_volume: float | None,
+        forecast_national_volume: float | None,
+        method: str,
+        method_label: str,
+        forecast_text: str | None,
+    ) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO daily_forecast
+                (report_date, target_date, forecast_volume, forecast_national_volume,
+                 method, method_label, forecast_text, generated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    report_date,
+                    target_date,
+                    forecast_volume,
+                    forecast_national_volume,
+                    method,
+                    method_label,
+                    forecast_text,
+                    datetime.utcnow().isoformat(),
+                ),
+            )
+            conn.commit()
+
+    def get_daily_forecast(self, report_date: str) -> dict | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT report_date, target_date, forecast_volume, forecast_national_volume,
+                       method, method_label, forecast_text, generated_at
+                FROM daily_forecast
+                WHERE report_date = ?
+                """,
+                (report_date,),
+            ).fetchone()
+        if not row:
+            return None
+        return {
+            "reportDate": row["report_date"],
+            "targetDate": row["target_date"],
+            "forecastVolume": row["forecast_volume"],
+            "forecastNationalVolume": row["forecast_national_volume"],
+            "method": row["method"],
+            "methodLabel": row["method_label"],
+            "forecastText": row["forecast_text"],
+            "generatedAt": row["generated_at"],
+        }

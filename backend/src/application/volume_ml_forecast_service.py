@@ -29,16 +29,18 @@ class VolumeMlForecastService:
         feature_anchor_date: str | None = None,
         seasonal_naive_4w: float | None = None,
         use_cache: bool = True,
+        forecast_ctx: dict | None = None,
+        rows: list[VolumeMlRow] | None = None,
     ) -> VolumeMlForecastResult | None:
-        rows = self._load_rows(report_date)
-        forecast_ctx = self.repository.get_volume_forecast_context(report_date)
+        resolved_ctx = forecast_ctx or self.repository.get_volume_forecast_context(report_date)
+        resolved_rows = rows if rows is not None else self._load_rows(report_date)
         return predict_next_volume(
-            rows,
+            resolved_rows,
             report_date,
-            operation_periods=forecast_ctx.get("operationPeriods"),
-            historical_no_parcel_avg=forecast_ctx.get("historicalNoParcelAvg"),
+            operation_periods=resolved_ctx.get("operationPeriods"),
+            historical_no_parcel_avg=resolved_ctx.get("historicalNoParcelAvg"),
             feature_anchor_date=feature_anchor_date,
-            seasonal_naive_4w=seasonal_naive_4w or forecast_ctx.get("seasonalNaive4w"),
+            seasonal_naive_4w=seasonal_naive_4w or resolved_ctx.get("seasonalNaive4w"),
             cache_path=self.model_cache_path,
             use_cache=use_cache,
         )
@@ -48,6 +50,9 @@ class VolumeMlForecastService:
         if result is None:
             return None
         return build_ml_volume_forecast_text(result)
+
+    def load_rows(self, through_date: str) -> list[VolumeMlRow]:
+        return self._load_rows(through_date)
 
     def _load_rows(self, through_date: str) -> list[VolumeMlRow]:
         raw_rows = self.repository.get_volume_ml_timeseries(through_date)

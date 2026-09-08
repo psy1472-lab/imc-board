@@ -36,13 +36,13 @@ export type DailyBriefing = {
   meta: {
     reportDate: string;
     centerName?: string;
-    compareBasis: string;
-    compareLabel: string;
+    compareBasis?: string;
+    compareLabel?: string;
     communicationStatus?: string;
     generatedAt: string;
     source: string;
   };
-  sections: {
+    sections: {
     todayOperation: BriefingSection;
     majorChanges: { title: string; items: BriefingChangeItem[] };
     staffing: BriefingSection;
@@ -51,9 +51,9 @@ export type DailyBriefing = {
     safety: BriefingSection;
   };
   highlights: BriefingHighlight[];
-  tomorrowOutlook: {
+  tomorrowOutlook?: {
     title: string;
     items: Array<{ label: string; text: string }>;
   };
-  disclaimer: string;
+  disclaimer?: string;
 };

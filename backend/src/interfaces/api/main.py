@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import sqlite3
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Body, Depends, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from application.briefing_service import BriefingService
 from application.report_parser import ReportParser
@@ -25,7 +26,16 @@ from interfaces.api.admin_auth import (
     require_admin,
 )
 
-app = FastAPI(title="IMC Operations Dashboard API", version="0.1.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    try:
+        briefing_service.volume_forecast_service.warm_model_cache()
+    except Exception:
+        pass
+    yield
+
+
+app = FastAPI(title="IMC Operations Dashboard API", version="0.1.0", lifespan=lifespan)
 _cors_regex = resolve_cors_origin_regex()
 app.add_middleware(
     CORSMiddleware,
@@ -93,6 +103,12 @@ async def upload_report(
     try:
         report = parser.parse(str(target))
         repository.save_report(str(target), report)
+        try:
+            briefing_service.volume_forecast_service.precompute_and_save(
+                report.report_date.isoformat()
+            )
+        except Exception:
+            pass
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except sqlite3.OperationalError as exc:
@@ -117,10 +133,14 @@ async def upload_report(
 @app.get("/api/reports/dates")
 def list_dates():
     metadata = repository.list_report_date_metadata()
-    return {
-        "dates": [item["reportDate"] for item in metadata],
-        "metadata": metadata,
-    }
+    response = JSONResponse(
+        {
+            "dates": [item["reportDate"] for item in metadata],
+            "metadata": metadata,
+        }
+    )
+    response.headers["Cache-Control"] = "public, max-age=300"
+    return response
 
 
 @app.get("/api/reports")
@@ -259,11 +279,19 @@ def safety_analysis(date: str = Query(..., description="YYYY-MM-DD")):
 def daily_briefing(
     date: str = Query(..., description="YYYY-MM-DD"),
     compare: str = Query("prev_day"),
+    sections: str = Query("all", description="all | core | forecast"),
 ):
-    payload = briefing_service.generate(date, compare)
+    if sections not in {"all", "core", "forecast"}:
+        raise HTTPException(status_code=400, detail="sections must be all, core, or forecast")
+    payload = briefing_service.generate(date, compare, sections=sections)
     if not payload:
         raise HTTPException(status_code=404, detail="report not found")
-    return payload
+    response = JSONResponse(payload)
+    if sections == "core":
+        response.headers["Cache-Control"] = "public, max-age=60"
+    elif sections == "forecast":
+        response.headers["Cache-Control"] = "public, max-age=300"
+    return response
 
 
 @app.get("/api/dashboard/summary")

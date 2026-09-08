@@ -14,7 +14,6 @@ import {
 } from "../components/panels/DashboardPanels";
 import { useDashboardFilters } from "../context/DashboardFilterContext";
 import { useTheme } from "../context/ThemeContext";
-import { fetchDashboardSummary } from "../lib/api";
 import type { DashboardSummary } from "../types/dashboard";
 
 const KPI_ORDER = [
@@ -42,8 +41,10 @@ function orderKpis(kpis: DashboardSummary["kpis"]) {
 
 export default function SummaryDashboard() {
   const { palette } = useTheme();
-  const { selectedDate, compare } = useDashboardFilters();
-  const [data, setData] = useState<DashboardSummary | null>(null);
+  const { selectedDate, compare, loadDashboardSummary, getCachedDashboardSummary } = useDashboardFilters();
+  const [data, setData] = useState<DashboardSummary | null>(() =>
+    selectedDate ? getCachedDashboardSummary(selectedDate, compare) : null,
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -51,7 +52,7 @@ export default function SummaryDashboard() {
     if (!selectedDate) return;
     setLoading(true);
     setError(null);
-    fetchDashboardSummary(selectedDate, compare)
+    loadDashboardSummary(selectedDate, compare)
       .then(setData)
       .catch(() => setError("대시보드 데이터를 불러오지 못했습니다."))
       .finally(() => setLoading(false));
@@ -60,6 +61,11 @@ export default function SummaryDashboard() {
   useEffect(() => {
     if (!selectedDate) {
       setData(null);
+      return;
+    }
+    const cached = getCachedDashboardSummary(selectedDate, compare);
+    if (cached) {
+      setData(cached);
       return;
     }
     loadData();

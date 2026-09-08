@@ -5,6 +5,7 @@ from domain.volume_forecast import (
     VolumeForecastResult,
     build_volume_forecast_text,
     estimate_staff_for_volume,
+    forecast_national_volume,
     forecast_next_day_volume,
     resolve_forecast_target_date,
 )

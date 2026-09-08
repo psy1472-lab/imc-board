@@ -149,16 +149,38 @@ export default function BriefingPage() {
   const { selectedDate } = useDashboardFilters();
   const [data, setData] = useState<DailyBriefing | null>(null);
   const [loading, setLoading] = useState(false);
+  const [forecastLoading, setForecastLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const loadData = () => {
     if (!selectedDate) return;
     setLoading(true);
+    setForecastLoading(true);
     setError(null);
-    fetchDailyBriefing(selectedDate)
-      .then(setData)
+    fetchDailyBriefing(selectedDate, "prev_day", "core")
+      .then((core) => {
+        setData({
+          ...core,
+          tomorrowOutlook: core.tomorrowOutlook ?? { title: "내일 전망", items: [] },
+        });
+        setLoading(false);
+        return fetchDailyBriefing(selectedDate, "prev_day", "forecast");
+      })
+      .then((forecast) => {
+        setData((current) =>
+          current
+            ? {
+                ...current,
+                tomorrowOutlook: forecast.tomorrowOutlook ?? { title: "내일 전망", items: [] },
+              }
+            : forecast as DailyBriefing,
+        );
+      })
       .catch(() => setError("AI 운영 브리핑을 불러오지 못했습니다."))
-      .finally(() => setLoading(false));
+      .finally(() => {
+        setLoading(false);
+        setForecastLoading(false);
+      });
   };
 
   useEffect(() => {
@@ -327,18 +349,24 @@ export default function BriefingPage() {
       </section>
 
       <section style={{ ...panel, marginBottom: 16 }}>
-        <h3 style={{ margin: "0 0 12px" }}>{data.tomorrowOutlook.title}</h3>
-        <div style={{ display: "grid", gap: 12 }}>
-          {data.tomorrowOutlook.items.map((item) => (
-            <div key={item.label} style={{ background: palette.panelAlt, borderRadius: 10, padding: "12px 14px" }}>
-              <div style={{ color: palette.muted, fontSize: 12, marginBottom: 4 }}>{item.label}</div>
-              <div style={{ fontSize: 14, lineHeight: 1.6 }}>{item.text}</div>
-            </div>
-          ))}
-        </div>
+        <h3 style={{ margin: "0 0 12px" }}>{data.tomorrowOutlook?.title ?? "내일 전망"}</h3>
+        {forecastLoading && (data.tomorrowOutlook?.items.length ?? 0) === 0 ? (
+          <div style={{ color: palette.muted, fontSize: 13 }}>내일 전망을 계산하는 중입니다…</div>
+        ) : (
+          <div style={{ display: "grid", gap: 12 }}>
+            {data.tomorrowOutlook?.items.map((item) => (
+              <div key={item.label} style={{ background: palette.panelAlt, borderRadius: 10, padding: "12px 14px" }}>
+                <div style={{ color: palette.muted, fontSize: 12, marginBottom: 4 }}>{item.label}</div>
+                <div style={{ fontSize: 14, lineHeight: 1.6 }}>{item.text}</div>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
-      <footer style={{ color: palette.muted, fontSize: 12, lineHeight: 1.6 }}>{data.disclaimer}</footer>
+      {data.disclaimer ? (
+        <footer style={{ color: palette.muted, fontSize: 12, lineHeight: 1.6 }}>{data.disclaimer}</footer>
+      ) : null}
     </>
   );
 }

@@ -124,8 +124,14 @@ export async function fetchSafetyAnalysis(date: string): Promise<SafetyAnalysis>
   return res.json();
 }
 
-export async function fetchDailyBriefing(date: string, compare = "prev_day"): Promise<DailyBriefing> {
-  const res = await fetch(`${API_BASE}/api/dashboard/briefing?date=${date}&compare=${compare}`);
+export async function fetchDailyBriefing(
+  date: string,
+  compare = "prev_day",
+  sections: "all" | "core" | "forecast" = "all",
+): Promise<DailyBriefing> {
+  const res = await fetch(
+    `${API_BASE}/api/dashboard/briefing?date=${date}&compare=${compare}&sections=${sections}`,
+  );
   if (!res.ok) {
     throw new Error("daily briefing not found");
   }

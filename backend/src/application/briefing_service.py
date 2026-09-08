@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime
 
 from application.volume_forecast_service import VolumeForecastService
@@ -46,37 +47,42 @@ class BriefingService:
             model_cache_path=model_cache_path,
         )
 
-    def generate(self, report_date: str, compare_basis: str = "prev_day") -> dict:
-        # 브리핑 헤더는 조회일 당일 보고서 기준이며, 추세 해석은 최근 7업무일 평균을 사용한다.
+    def generate(
+        self,
+        report_date: str,
+        compare_basis: str = "prev_day",
+        *,
+        sections: str = "all",
+    ) -> dict:
+        if sections == "forecast":
+            return self._generate_forecast_section(report_date)
+
         internal_compare = "7d_avg"
         summary = self.repository.get_dashboard_summary(report_date, internal_compare)
         if not summary:
             return {}
 
-        volume = self.repository.get_volume_analysis(report_date)
-        staffing = self.repository.get_staffing_analysis(report_date)
-        transport = self.repository.get_transport_analysis(report_date)
-        equipment = self.repository.get_equipment_analysis(report_date)
-        safety = self.repository.get_safety_analysis(report_date)
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            volume_future = pool.submit(self.repository.get_volume_analysis, report_date)
+            staffing_future = pool.submit(self.repository.get_staffing_analysis, report_date)
+            transport_future = pool.submit(self.repository.get_transport_analysis, report_date)
+            equipment_future = pool.submit(self.repository.get_equipment_analysis, report_date)
+            safety_future = pool.submit(self.repository.get_safety_analysis, report_date)
+            hourly_future = pool.submit(self.repository.get_hourly_volume_pattern, report_date)
+            volume = volume_future.result()
+            staffing = staffing_future.result()
+            transport = transport_future.result()
+            equipment = equipment_future.result()
+            safety = safety_future.result()
+            hourly_pattern = hourly_future.result()
 
-        volume_summary = volume.get("summary", {})
-        transport_summary = transport.get("summary", {})
         anomalies = safety.get("anomalies", [])
         quota_overages = transport.get("quotaOverages", [])
 
         major_changes = self._build_major_changes(volume, staffing, equipment)
         highlights = self._build_highlights(anomalies, quota_overages, safety.get("summary", {}))
-        tomorrow = self._build_tomorrow_outlook(
-            report_date,
-            volume,
-            staffing,
-            transport,
-            equipment,
-            safety,
-            self.repository.get_hourly_volume_pattern(report_date),
-        )
 
-        return {
+        payload = {
             "meta": {
                 "reportDate": report_date,
                 "centerName": summary.get("meta", {}).get("centerName"),
@@ -89,40 +95,7 @@ class BriefingService:
             "sections": {
                 "todayOperation": {
                     "title": "오늘의 운영상황",
-                    "items": [
-                        {
-                            "label": "총 처리물량",
-                            "value": self._format_thousand(volume_summary.get("totalVolume")),
-                            "unit": "천개",
-                        },
-                        {
-                            "label": "발송",
-                            "value": self._format_thousand(volume_summary.get("dispatchVolume")),
-                            "unit": "천개",
-                        },
-                        {
-                            "label": "도착",
-                            "value": self._format_thousand(volume_summary.get("arrivalVolume")),
-                            "unit": "천개",
-                        },
-                        {
-                            "label": "잔량",
-                            "value": self._format_thousand(volume_summary.get("remainingVolume")),
-                            "unit": "천개",
-                            **(
-                                {"text": remaining_detail}
-                                if (remaining_detail := self._join_messages(
-                                    self._anomaly_category_messages(anomalies, "volume")
-                                ))
-                                else {}
-                            ),
-                        },
-                        {
-                            "label": "전국대비 처리율",
-                            "value": volume_summary.get("processingRate"),
-                            "unit": "%",
-                        },
-                    ],
+                    "items": self._build_today_operation_items(volume, anomalies),
                 },
                 "majorChanges": {
                     "title": "주요 변화",
@@ -134,15 +107,108 @@ class BriefingService:
                 "safety": self._build_safety_section(safety, anomalies),
             },
             "highlights": highlights,
-            "tomorrowOutlook": {
-                "title": "내일 전망",
-                "items": tomorrow,
-            },
             "disclaimer": (
                 "본 브리핑은 PDF 보고서 기반 데이터를 규칙으로 요약·해석한 참고 자료입니다. "
                 "최종 운영 판단은 담당자 확인이 필요합니다."
             ),
         }
+
+        if sections in {"all", "forecast"}:
+            forecast_ctx = self.repository.get_volume_forecast_context(report_date)
+            ml_rows = self.volume_forecast_service.ml_service.load_rows(report_date)
+            report_dates = self.repository.list_report_dates()
+            payload["tomorrowOutlook"] = {
+                "title": "내일 전망",
+                "items": self._build_tomorrow_outlook(
+                    report_date,
+                    volume,
+                    staffing,
+                    transport,
+                    equipment,
+                    safety,
+                    hourly_pattern,
+                    forecast_ctx=forecast_ctx,
+                    ml_rows=ml_rows,
+                    report_dates=report_dates,
+                ),
+            }
+        elif sections == "core":
+            payload["tomorrowOutlook"] = {"title": "내일 전망", "items": []}
+
+        return payload
+
+    def _generate_forecast_section(self, report_date: str) -> dict:
+        summary = self.repository.get_dashboard_summary(report_date, "7d_avg")
+        if not summary:
+            return {}
+        volume = self.repository.get_volume_analysis(report_date)
+        staffing = self.repository.get_staffing_analysis(report_date)
+        transport = self.repository.get_transport_analysis(report_date)
+        equipment = self.repository.get_equipment_analysis(report_date)
+        safety = self.repository.get_safety_analysis(report_date)
+        hourly_pattern = self.repository.get_hourly_volume_pattern(report_date)
+        forecast_ctx = self.repository.get_volume_forecast_context(report_date)
+        ml_rows = self.volume_forecast_service.ml_service.load_rows(report_date)
+        report_dates = self.repository.list_report_dates()
+        return {
+            "meta": {
+                "reportDate": report_date,
+                "generatedAt": datetime.utcnow().isoformat(),
+                "source": "rule_based",
+            },
+            "tomorrowOutlook": {
+                "title": "내일 전망",
+                "items": self._build_tomorrow_outlook(
+                    report_date,
+                    volume,
+                    staffing,
+                    transport,
+                    equipment,
+                    safety,
+                    hourly_pattern,
+                    forecast_ctx=forecast_ctx,
+                    ml_rows=ml_rows,
+                    report_dates=report_dates,
+                ),
+            },
+        }
+
+    def _build_today_operation_items(self, volume: dict, anomalies: list[dict]) -> list[dict]:
+        volume_summary = volume.get("summary", {})
+        return [
+            {
+                "label": "총 처리물량",
+                "value": self._format_thousand(volume_summary.get("totalVolume")),
+                "unit": "천개",
+            },
+            {
+                "label": "발송",
+                "value": self._format_thousand(volume_summary.get("dispatchVolume")),
+                "unit": "천개",
+            },
+            {
+                "label": "도착",
+                "value": self._format_thousand(volume_summary.get("arrivalVolume")),
+                "unit": "천개",
+            },
+            {
+                "label": "잔량",
+                "value": self._format_thousand(volume_summary.get("remainingVolume")),
+                "unit": "천개",
+                **(
+                    {"text": remaining_detail}
+                    if (remaining_detail := self._join_messages(
+                        self._anomaly_category_messages(anomalies, "volume")
+                    ))
+                    else {}
+                ),
+            },
+            {
+                "label": "전국대비 처리율",
+                "value": volume_summary.get("processingRate"),
+                "unit": "%",
+            },
+        ]
 
     def _build_staffing_section(
         self,
@@ -997,35 +1063,51 @@ class BriefingService:
         equipment: dict,
         safety: dict,
         hourly_pattern: dict,
+        *,
+        forecast_ctx: dict,
+        ml_rows: list,
+        report_dates: list[str],
     ) -> list[dict]:
         items: list[dict] = []
         volume_summary = volume.get("summary", {})
         volume_benchmarks = volume.get("benchmarks", {})
-        forecast_ctx = self.repository.get_volume_forecast_context(report_date)
-        forecast_outcome = self.volume_forecast_service.predict(report_date)
 
-        if forecast_outcome is not None:
-            if forecast_outcome.method.startswith("ml"):
-                ml_result = self.volume_forecast_service.ml_service.predict(
-                    report_date,
-                    seasonal_naive_4w=forecast_ctx.get("seasonalNaive4w"),
-                )
-                forecast_text = (
-                    build_ml_volume_forecast_text(ml_result)
-                    if ml_result is not None
-                    else None
-                )
-            else:
-                rule_result = self.volume_forecast_service._predict_rule(report_date, forecast_ctx)
-                forecast_text = (
-                    build_volume_forecast_text(rule_result) + f" [{forecast_outcome.method_label}]"
-                    if rule_result is not None
-                    else None
-                )
-            if forecast_text:
-                items.append({"label": "예상 물량", "text": forecast_text})
+        stored_forecast = self.repository.get_daily_forecast(report_date)
+        forecast_outcome = None
+        forecast_text = stored_forecast.get("forecastText") if stored_forecast else None
 
-        prior_outcome = self.volume_forecast_service.predict_for_target(report_date)
+        if forecast_text:
+            items.append({"label": "예상 물량", "text": forecast_text})
+            forecast_volume = stored_forecast.get("forecastVolume")
+        else:
+            forecast_outcome = self.volume_forecast_service.predict(
+                report_date,
+                forecast_ctx=forecast_ctx,
+                rows=ml_rows,
+                volume=volume,
+            )
+            if forecast_outcome is not None:
+                if forecast_outcome.method.startswith("ml") and forecast_outcome.ml_result is not None:
+                    forecast_text = build_ml_volume_forecast_text(forecast_outcome.ml_result)
+                else:
+                    rule_result = self.volume_forecast_service._predict_rule(
+                        report_date,
+                        forecast_ctx,
+                        volume=volume,
+                    )
+                    forecast_text = (
+                        build_volume_forecast_text(rule_result) + f" [{forecast_outcome.method_label}]"
+                        if rule_result is not None
+                        else None
+                    )
+                if forecast_text:
+                    items.append({"label": "예상 물량", "text": forecast_text})
+            forecast_volume = forecast_outcome.forecast_volume if forecast_outcome else None
+
+        prior_outcome = self.volume_forecast_service.predict_for_target(
+            report_date,
+            report_dates=report_dates,
+        )
         today_volume = volume_summary.get("totalVolume")
         if prior_outcome is not None and today_volume is not None:
             accuracy_text = build_forecast_accuracy_text(
@@ -1063,9 +1145,9 @@ class BriefingService:
             or volume_benchmarks.get("avg7d", {}).get("totalVolume")
         )
         forecast_volume = (
-            forecast_outcome.forecast_volume
-            if forecast_outcome is not None
-            else None
+            forecast_volume
+            if forecast_volume is not None
+            else (forecast_outcome.forecast_volume if forecast_outcome is not None else None)
         )
         suggested_staff = (
             estimate_staff_for_volume(forecast_volume, ref_volume, avg_staff_7d)

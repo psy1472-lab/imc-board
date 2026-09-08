@@ -62,7 +62,9 @@ class BriefingForecastValidationTests(unittest.TestCase):
         ]
         self.assertEqual(len(validation_items), 1)
         self.assertIn("489.6", validation_items[0]["text"])
-        service.volume_forecast_service.predict_for_target.assert_called_once_with("2026-08-31")
+        service.volume_forecast_service.predict_for_target.assert_called_once()
+        call_args = service.volume_forecast_service.predict_for_target.call_args
+        self.assertEqual(call_args.args[0], "2026-08-31")
 
 
 if __name__ == "__main__":

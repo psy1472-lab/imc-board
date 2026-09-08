@@ -2,9 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, timedelta
+from typing import TYPE_CHECKING
 
 from domain.day_type import resolve_day_type
 from domain.volume_forecast import resolve_forecast_target_date
+
+if TYPE_CHECKING:
+    from domain.volume_ml_forecast import VolumeMlForecastResult
 
 
 @dataclass(frozen=True)
@@ -19,6 +23,8 @@ class VolumeForecastOutcome:
     ml_volume: float | None = None
     bias_adjustment: float = 0.0
     operation_period_labels: tuple[str, ...] = ()
+    ml_result: VolumeMlForecastResult | None = None
+    forecast_national_volume: float | None = None
 
 
 def is_weekday_target(day_type: str) -> bool:

@@ -10,6 +10,7 @@ import numpy as np
 
 from domain.day_type import resolve_day_type
 from domain.forecast_router import is_weekday_target
+from infrastructure.config import ml_inference_mode_fast
 from domain.operation_period import (
     SPECIAL_COMMUNICATION_PERIOD_TYPES,
     no_parcel_period_features,
@@ -461,15 +462,20 @@ def _estimate_rolling_bias(
     operation_periods: list[dict] | None,
     model: RegressorLike,
     best_key: str,
+    *,
+    X: np.ndarray | None = None,
+    y: np.ndarray | None = None,
+    weights: np.ndarray | None = None,
 ) -> float:
-    X, y, weights, _ = build_training_dataset(rows, operation_periods, weekday_only=True)
+    if X is None or y is None:
+        X, y, weights, _ = build_training_dataset(rows, operation_periods, weekday_only=True)
     if len(y) < BIAS_WINDOW:
         return 0.0
     tail = min(BIAS_WINDOW, len(y))
     preds = model.predict(X[-tail:])
     errors = preds - y[-tail:]
-    sample_weights = weights[-tail:]
-    if np.any(sample_weights > 0):
+    sample_weights = weights[-tail:] if weights is not None else None
+    if sample_weights is not None and np.any(sample_weights > 0):
         return float(round(np.average(errors, weights=sample_weights), 1))
     return float(round(np.mean(errors), 1))
 
@@ -591,6 +597,26 @@ def predict_next_volume(
                 mape=0.0,
             ),
         )
+    elif ml_inference_mode_fast():
+        models = _create_models()
+        best_key = "lightgbm" if "lightgbm" in models else "gradient_boosting"
+        model = train_best_model(X, y, best_key, sample_weights)
+        metrics = (
+            ModelMetric(
+                model_key=best_key,
+                model_label=MODEL_LABELS.get(best_key, best_key),
+                mae=0.0,
+                mape=0.0,
+            ),
+        )
+        if cache_path is not None and use_cache:
+            save_model_cache(
+                cache_path,
+                model=model,
+                best_key=best_key,
+                trained_through=trained_through,
+                training_samples=len(y),
+            )
     else:
         try:
             best_key, metrics = compare_models(X, y, sample_weights)
@@ -664,7 +690,15 @@ def predict_next_volume(
     )
     ml_raw = float(model.predict(np.asarray([feature_vector], dtype=float))[0])
     ml_raw = round(max(ml_raw, 0.0), 1)
-    bias = _estimate_rolling_bias(rows, operation_periods, model, best_key)
+    bias = _estimate_rolling_bias(
+        rows,
+        operation_periods,
+        model,
+        best_key,
+        X=X,
+        y=y,
+        weights=sample_weights,
+    )
 
     if baseline_4w is not None:
         holdout_start = max(int(len(y) * (1 - HOLDOUT_RATIO)), MIN_TRAINING_SAMPLES // 2)
