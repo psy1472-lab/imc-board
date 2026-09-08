@@ -1,0 +1,15 @@
+data/
+backend/.venv/
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+.cursor/
+__pycache__/
+*.pyc
+.env
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+backend/data/models/*.pkl
+.DS_Store

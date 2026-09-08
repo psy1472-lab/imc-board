@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: imc-dashboard-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    plan: starter
+    healthCheckPath: /api/health
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: DATA_DIR
+        value: /var/data
+      - key: DATABASE_URL
+        value: sqlite:////var/data/imc_dashboard.db
+      - key: IMC_ADMIN_PASSWORD
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+    disk:
+      name: imc-data
+      mountPath: /var/data
+      sizeGB: 1

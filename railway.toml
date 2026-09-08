@@ -1,0 +1,12 @@
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "backend/Dockerfile"
+
+[deploy]
+healthcheckPath = "/api/health"
+healthcheckTimeout = 120
+restartPolicyType = "ON_FAILURE"
+
+# Mount persistent volume at /app/data in Railway dashboard:
+# DATABASE_URL=sqlite:////app/data/imc_dashboard.db
+# DATA_DIR=/app/data

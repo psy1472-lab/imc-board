@@ -1,0 +1,426 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import date, timedelta
+
+from domain.day_type import resolve_day_type
+from domain.operation_period import apply_operation_period_volume_adjustment
+
+WEEKDAY_LABELS = ["월", "화", "수", "목", "금", "토", "일"]
+
+DAY_TYPE_LABELS = {
+    "weekday": "평일",
+    "saturday": "토요일",
+    "sunday": "일요일",
+    "holiday": "공휴일",
+}
+
+# Seasonal Naive(m=7) + 동일 요일 4주 평균 앙상블 (Hyndman 벤치마크 기반)
+WEEKDAY_SEASONAL_LATEST_WEIGHT = 0.35
+WEEKDAY_SEASONAL_4W_WEIGHT = 0.30
+WEEKDAY_SAME_TYPE_BASELINE_WEIGHT = 0.20
+WEEKDAY_DRIFT_WEIGHT = 0.15
+
+WEEKEND_SEASONAL_LATEST_WEIGHT = 0.25
+WEEKEND_SEASONAL_4W_WEIGHT = 0.35
+WEEKEND_SAME_TYPE_BASELINE_WEIGHT = 0.40
+
+# 폴백(동일 요일 데이터 부족 시)
+WEEKDAY_WEIGHT_STRONG = 0.45
+WEEKDAY_WEIGHT_WEAK = 0.30
+RECENT_7D_WEIGHT = 0.25
+RECENT_30D_WEIGHT = 0.15
+RECENT_3D_WEIGHT = 0.15
+
+TREND_FACTOR_MIN = 0.88
+TREND_FACTOR_MAX = 1.12
+MOMENTUM_FACTOR_MIN = 0.92
+MOMENTUM_FACTOR_MAX = 1.08
+DRIFT_DAMPING = 0.5
+
+
+@dataclass(frozen=True)
+class VolumeForecastResult:
+    tomorrow_date: str
+    tomorrow_weekday_label: str
+    tomorrow_day_type: str
+    forecast_volume: float
+    weekday_average: float | None
+    recent_7d_average: float | None
+    recent_30d_average: float | None
+    recent_3d_average: float | None
+    today_volume: float | None
+    weekday_sample_count: int
+    trend_factor: float
+    momentum_factor: float
+    recent_trend_direction: str | None
+    confidence: str
+    forecast_target_note: str | None = None
+    seasonal_naive_1w: float | None = None
+    seasonal_naive_4w: float | None = None
+    forecast_method: str = "seasonal_naive_ensemble"
+    operation_period_labels: tuple[str, ...] = ()
+
+
+def resolve_forecast_target_date(report_day: date) -> date:
+    """IMC 운영 기준 전망 대상일. 금요일 보고서는 토요일을 건너뛰고 일요일을 전망한다."""
+    if report_day.weekday() == 4:
+        return report_day + timedelta(days=2)
+    return report_day + timedelta(days=1)
+
+
+def forecast_target_note_for(report_day: date, target_day: date) -> str | None:
+    if report_day.weekday() == 4 and target_day.weekday() == 6:
+        return "토요일 제외, 일요일 기준"
+    return None
+
+
+def _clamp(value: float, lower: float, upper: float) -> float:
+    return max(lower, min(upper, value))
+
+
+def _weighted_average(parts: list[tuple[float, float]]) -> float | None:
+    if not parts:
+        return None
+    total_weight = sum(weight for _, weight in parts)
+    return sum(value * weight for value, weight in parts) / total_weight
+
+
+def _recent_trend_direction(recent_volumes: list[float | None]) -> str | None:
+    values = [value for value in recent_volumes if value is not None]
+    if len(values) < 4:
+        return None
+    recent_3 = sum(values[-3:]) / 3
+    prior = sum(values[:-3]) / len(values[:-3])
+    if prior == 0:
+        return None
+    change_ratio = recent_3 / prior
+    if change_ratio >= 1.03:
+        return "상승"
+    if change_ratio <= 0.97:
+        return "하락"
+    return "보합"
+
+
+def _damped_drift_factor(today_volume: float | None, reference: float | None) -> float:
+    if today_volume is None or reference in (None, 0):
+        return 1.0
+    raw = today_volume / reference
+    return 1.0 + (raw - 1.0) * DRIFT_DAMPING
+
+
+def _build_seasonal_ensemble(
+    *,
+    target_day_type: str,
+    seasonal_naive_1w: float | None,
+    seasonal_naive_4w: float | None,
+    same_type_baseline: float | None,
+    weekday_average: float | None,
+) -> tuple[float | None, str]:
+    baseline = same_type_baseline if same_type_baseline is not None else weekday_average
+    is_weekend_target = target_day_type in {"saturday", "sunday", "holiday"}
+
+    if is_weekend_target:
+        parts: list[tuple[float, float]] = []
+        if seasonal_naive_4w is not None:
+            parts.append((seasonal_naive_4w, WEEKEND_SEASONAL_4W_WEIGHT))
+        if baseline is not None:
+            parts.append((baseline, WEEKEND_SAME_TYPE_BASELINE_WEIGHT))
+        if seasonal_naive_1w is not None:
+            parts.append((seasonal_naive_1w, WEEKEND_SEASONAL_LATEST_WEIGHT))
+        base = _weighted_average(parts)
+        if base is not None:
+            return base, "seasonal_naive_weekend"
+    else:
+        parts = []
+        if seasonal_naive_1w is not None:
+            parts.append((seasonal_naive_1w, WEEKDAY_SEASONAL_LATEST_WEIGHT))
+        if seasonal_naive_4w is not None:
+            parts.append((seasonal_naive_4w, WEEKDAY_SEASONAL_4W_WEIGHT))
+        if baseline is not None:
+            parts.append((baseline, WEEKDAY_SAME_TYPE_BASELINE_WEIGHT))
+        base = _weighted_average(parts)
+        if base is not None:
+            return base, "seasonal_naive_weekday"
+
+    return None, "fallback"
+
+
+def _build_fallback_ensemble(
+    *,
+    weekday_average: float | None,
+    weekday_sample_count: int,
+    avg_7d_volume: float | None,
+    avg_30d_volume: float | None,
+    recent_3d_average: float | None,
+) -> float | None:
+    parts: list[tuple[float, float]] = []
+    if weekday_average is not None:
+        weekday_weight = WEEKDAY_WEIGHT_STRONG if weekday_sample_count >= 3 else WEEKDAY_WEIGHT_WEAK
+        parts.append((weekday_average, weekday_weight))
+    if avg_7d_volume is not None:
+        parts.append((avg_7d_volume, RECENT_7D_WEIGHT))
+    if avg_30d_volume is not None:
+        parts.append((avg_30d_volume, RECENT_30D_WEIGHT))
+    if recent_3d_average is not None:
+        parts.append((recent_3d_average, RECENT_3D_WEIGHT))
+    return _weighted_average(parts)
+
+
+def forecast_next_day_volume(
+    report_date: str,
+    *,
+    today_volume: float | None,
+    avg_7d_volume: float | None,
+    avg_30d_volume: float | None = None,
+    recent_7d_volumes: list[float | None] | None = None,
+    weekday_volumes: list[float | None],
+    weekday_sample_counts: list[int],
+    tomorrow_day_type: str | None = None,
+    forecast_target_date: str | None = None,
+    forecast_target_note: str | None = None,
+    same_type_baseline: float | None = None,
+    same_type_avg_7d: float | None = None,
+    same_type_avg_30d: float | None = None,
+    same_type_recent_volumes: list[float | None] | None = None,
+    same_type_sample_count: int = 0,
+    today_type_avg_7d: float | None = None,
+    seasonal_naive_1w: float | None = None,
+    seasonal_naive_4w: float | None = None,
+    operation_periods: list[dict] | None = None,
+    historical_no_parcel_avg: float | None = None,
+    volume_by_date: dict[str, float] | None = None,
+) -> VolumeForecastResult | None:
+    report_day = date.fromisoformat(report_date)
+    target = (
+        date.fromisoformat(forecast_target_date)
+        if forecast_target_date
+        else resolve_forecast_target_date(report_day)
+    )
+    target_idx = target.weekday()
+    resolved_day_type = tomorrow_day_type or resolve_day_type(target)
+    target_note = forecast_target_note or forecast_target_note_for(report_day, target)
+
+    weekday_average = (
+        weekday_volumes[target_idx] if target_idx < len(weekday_volumes) else None
+    )
+    weekday_sample_count = (
+        weekday_sample_counts[target_idx]
+        if target_idx < len(weekday_sample_counts)
+        else 0
+    )
+
+    use_same_type = (
+        same_type_baseline is not None
+        or same_type_avg_7d is not None
+        or seasonal_naive_1w is not None
+        or seasonal_naive_4w is not None
+    )
+
+    if use_same_type:
+        weekday_average = same_type_baseline or weekday_average
+        weekday_sample_count = same_type_sample_count or weekday_sample_count
+        avg_7d_volume = same_type_avg_7d
+        avg_30d_volume = same_type_avg_30d
+        recent_7d_volumes = same_type_recent_volumes
+
+    recent_3d_average = None
+    if recent_7d_volumes:
+        recent_values = [value for value in recent_7d_volumes if value is not None]
+        if len(recent_values) >= 3:
+            recent_3d_average = sum(recent_values[-3:]) / 3
+
+    base, method = _build_seasonal_ensemble(
+        target_day_type=resolved_day_type,
+        seasonal_naive_1w=seasonal_naive_1w,
+        seasonal_naive_4w=seasonal_naive_4w,
+        same_type_baseline=same_type_baseline,
+        weekday_average=weekday_average,
+    )
+
+    if base is None:
+        base = _build_fallback_ensemble(
+            weekday_average=weekday_average,
+            weekday_sample_count=weekday_sample_count,
+            avg_7d_volume=avg_7d_volume,
+            avg_30d_volume=avg_30d_volume,
+            recent_3d_average=recent_3d_average,
+        )
+        method = "fallback_blend"
+
+    if base is None:
+        return None
+
+    trend_reference = today_type_avg_7d if use_same_type and today_type_avg_7d is not None else avg_7d_volume
+
+    drift_factor = _damped_drift_factor(today_volume, trend_reference)
+    if method.startswith("seasonal_naive"):
+        combined_trend = 1.0 + (drift_factor - 1.0) * WEEKDAY_DRIFT_WEIGHT / 0.15
+    else:
+        trend_factor = 1.0
+        if today_volume is not None and trend_reference not in (None, 0):
+            trend_factor = _clamp(today_volume / trend_reference, TREND_FACTOR_MIN, TREND_FACTOR_MAX)
+        momentum_factor = 1.0
+        if recent_3d_average is not None and trend_reference not in (None, 0):
+            momentum_factor = _clamp(
+                recent_3d_average / trend_reference,
+                MOMENTUM_FACTOR_MIN,
+                MOMENTUM_FACTOR_MAX,
+            )
+        combined_trend = (
+            (trend_factor + momentum_factor) / 2
+            if today_volume is not None
+            else momentum_factor
+        )
+        drift_factor = combined_trend
+
+    forecast_volume = round(base * combined_trend, 1)
+    forecast_volume, period_labels = apply_operation_period_volume_adjustment(
+        forecast_volume,
+        target,
+        operation_periods or [],
+        historical_no_parcel_avg=historical_no_parcel_avg,
+        volume_by_date=volume_by_date,
+        before_date=target,
+    )
+
+    seasonal_samples = same_type_sample_count or weekday_sample_count
+    if seasonal_samples >= 4 and seasonal_naive_4w is not None and seasonal_naive_1w is not None:
+        confidence = "high"
+    elif seasonal_samples >= 2 or seasonal_naive_1w is not None:
+        confidence = "medium"
+    else:
+        confidence = "low"
+
+    trend_factor_out = drift_factor if method.startswith("seasonal_naive") else (
+        _clamp(today_volume / trend_reference, TREND_FACTOR_MIN, TREND_FACTOR_MAX)
+        if today_volume is not None and trend_reference not in (None, 0)
+        else 1.0
+    )
+    momentum_factor_out = (
+        _clamp(recent_3d_average / trend_reference, MOMENTUM_FACTOR_MIN, MOMENTUM_FACTOR_MAX)
+        if recent_3d_average is not None and trend_reference not in (None, 0)
+        else 1.0
+    )
+
+    return VolumeForecastResult(
+        tomorrow_date=target.isoformat(),
+        tomorrow_weekday_label=WEEKDAY_LABELS[target_idx],
+        tomorrow_day_type=resolved_day_type,
+        forecast_volume=forecast_volume,
+        weekday_average=weekday_average,
+        recent_7d_average=avg_7d_volume,
+        recent_30d_average=avg_30d_volume,
+        recent_3d_average=recent_3d_average,
+        today_volume=today_volume,
+        weekday_sample_count=weekday_sample_count,
+        trend_factor=round(trend_factor_out, 3),
+        momentum_factor=round(momentum_factor_out, 3),
+        recent_trend_direction=_recent_trend_direction(recent_7d_volumes or []),
+        confidence=confidence,
+        forecast_target_note=target_note,
+        seasonal_naive_1w=seasonal_naive_1w,
+        seasonal_naive_4w=seasonal_naive_4w,
+        forecast_method=method,
+        operation_period_labels=period_labels,
+    )
+
+
+def build_volume_forecast_text(result: VolumeForecastResult) -> str:
+    day_type_label = DAY_TYPE_LABELS.get(result.tomorrow_day_type, result.tomorrow_day_type)
+    target_hint = (
+        f"({result.forecast_target_note}) "
+        if result.forecast_target_note
+        else ""
+    )
+    lead = (
+        f"전망일({result.tomorrow_weekday_label}·{day_type_label}){target_hint} "
+        f"예상 처리물량은 약 {result.forecast_volume:,.1f}천개입니다."
+    )
+
+    detail_parts: list[str] = []
+    if result.seasonal_naive_1w is not None:
+        detail_parts.append(
+            f"직전 동일 요일(Seasonal Naive) {result.seasonal_naive_1w:,.1f}천개"
+        )
+    if result.seasonal_naive_4w is not None:
+        detail_parts.append(
+            f"동일 요일 최근 4주 평균 {result.seasonal_naive_4w:,.1f}천개"
+        )
+    if result.weekday_average is not None and result.weekday_sample_count > 0:
+        scope = (
+            f"동일 유형({day_type_label})"
+            if result.tomorrow_day_type != "weekday"
+            else f"동일 요일({result.tomorrow_weekday_label})"
+        )
+        detail_parts.append(
+            f"{scope} 장기 평균 {result.weekday_average:,.1f}천개"
+            f"(표본 {result.weekday_sample_count}일)"
+        )
+
+    if detail_parts:
+        basis = ", ".join(detail_parts)
+    else:
+        basis = "가용한 과거 데이터"
+
+    method_note = (
+        "요일 계절성(Seasonal Naive) 앙상블"
+        if result.forecast_method.startswith("seasonal_naive")
+        else "과거 평균 블렌드"
+    )
+
+    trend_notes: list[str] = []
+    if result.recent_trend_direction:
+        trend_notes.append(f"최근 동일 요일 추이는 {result.recent_trend_direction}")
+    if result.today_volume is not None and result.trend_factor != 1.0:
+        direction = "높은" if result.trend_factor > 1 else "낮은"
+        trend_notes.append(f"오늘 물량은 동일 유형 7일 평균 대비 {direction} 수준")
+
+    if trend_notes:
+        return (
+            f"{lead} {method_note}({basis})와 {', '.join(trend_notes)}을 반영한 추정치입니다."
+            f"{_operation_period_suffix(result.operation_period_labels)}"
+        )
+    return (
+        f"{lead} {method_note}({basis})를 기반으로 산출한 추정치입니다."
+        f"{_operation_period_suffix(result.operation_period_labels)}"
+    )
+
+
+def _operation_period_suffix(labels: tuple[str, ...]) -> str:
+    if not labels:
+        return ""
+    joined = ", ".join(labels)
+    return f" 등록된 운영 특이 일정({joined})을 반영했습니다."
+
+
+def build_forecast_accuracy_text(
+    forecast_volume: float,
+    actual_volume: float,
+    *,
+    forecast_date: str,
+) -> str:
+    if actual_volume <= 0:
+        return ""
+    diff = actual_volume - forecast_volume
+    diff_pct = abs(diff) / actual_volume * 100
+    direction = "높게" if diff < 0 else "낮게"
+    if diff_pct < 5:
+        return (
+            f"당일({forecast_date}) 전일 예측 {forecast_volume:,.1f}천개, 실제 {actual_volume:,.1f}천개로 "
+            f"오차 약 {diff_pct:.1f}% — 예측과 유사했습니다."
+        )
+    return (
+        f"당일({forecast_date}) 전일 예측 {forecast_volume:,.1f}천개, 실제 {actual_volume:,.1f}천개로 "
+        f"약 {diff_pct:.1f}% {direction} 예측되었습니다."
+    )
+
+
+def estimate_staff_for_volume(
+    forecast_volume: float,
+    reference_volume: float | None,
+    reference_staff: float | None,
+) -> float | None:
+    if reference_volume in (None, 0) or reference_staff is None:
+        return None
+    return round(reference_staff * (forecast_volume / reference_volume), 1)

@@ -1,0 +1,1768 @@
+{
+  "large_hourly_diff": [
+    {
+      "report_date": "2025-02-05",
+      "total": 362000,
+      "hourly_sum": 426000,
+      "diff": -64000
+    },
+    {
+      "report_date": "2025-01-21",
+      "total": 557000,
+      "hourly_sum": 504000,
+      "diff": 53000
+    },
+    {
+      "report_date": "2026-02-10",
+      "total": 482000,
+      "hourly_sum": 429000,
+      "diff": 53000
+    },
+    {
+      "report_date": "2025-01-17",
+      "total": 450000,
+      "hourly_sum": 398000,
+      "diff": 52000
+    }
+  ],
+  "fail_dates": [
+    "2025-10-10",
+    "2025-12-12",
+    "2026-04-26"
+  ],
+  "details": [
+    {
+      "report_date": "2025-01-17",
+      "file_path": "C:\\Users\\buzru\\OneDrive\\바탕 화면\\cursor_imc\\imc operations dashboard\\data\\uploads\\중부권IMC 일일 소통결과 보고(25.01.17.금).pdf",
+      "report_format": "standard",
+      "daily": {
+        "total": 450000,
+        "dispatch": 337000,
+        "arrival": 113000,
+        "remaining": 0,
+        "dispatch_plus_arrival": 450000,
+        "raw_values": {
+          "total_volume": "45.0만개",
+          "dispatch_volume": "33.7만개",
+          "arrival_volume": "11.3만개",
+          "remaining_volume": "없음",
+          "national_volume": "129.4만"
+        }
+      },
+      "hourly_sum": 398000,
+      "hourly_diff": 52000,
+      "validation_issues": [
+        {
+          "rule": "hourly_sum_equals_total",
+          "status": "WARNING",
+          "details": {
+            "hourly_total": 398000,
+            "total": 450000
+          }
+        }
+      ],
+      "hourly_parse": {
+        "dispatch": {
+          "matched": true,
+          "raw_len": 15,
+          "raw": [
+            "5.2",
+            "4.4",
+            "4.9",
+            "5.2",
+            "5.7",
+            "4.5",
+            "2.8",
+            "0.9",
+            null,
+            "0.1",
+            null,
+            null,
+            null,
+            null,
+            "33.7"
+          ],
+          "aligned": [
+            "4.4",
+            "4.9",
+            "5.2",
+            "5.7",
+            "4.5",
+            "2.8",
+            "0.9",
+            null,
+            "0.1",
+            null,
+            null,
+            null,
+            null
+          ],
+          "row_total": null,
+          "snippet": "\n발송 5.2 4.4 4.9 5.2 5.7 4.5 2.8 0.9 - 0.1 - - - - 33.7"
+        },
+        "arrival": {
+          "matched": true,
+          "raw_len": 15,
+          "raw": [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "1.0",
+            "5.4",
+            "4.2",
+            "0.7",
+            null,
+            null,
+            null,
+            "11.3"
+          ],
+          "aligned": [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "1.0",
+            "5.4",
+            "4.2",
+            "0.7",
+            null,
+            null,
+            null
+          ],
+          "row_total": null,
+          "snippet": "도착 - - - - - - - 1.0 5.4 4.2 0.7 - - - 11.3"
+        },
+        "total": {
+          "matched": true,
+          "raw_len": 15,
+          "raw": [
+            "5.2",
+            "4.4",
+            "4.9",
+            "5.2",
+            "5.7",
+            "4.5",
+            "2.8",
+            "1.9",
+            "5.4",
+            "4.3",
+            "0.7",
+            null,
+            null,
+            null,
+            "45.0"
+          ],
+          "aligned": [
+            "4.4",
+            "4.9",
+            "5.2",
+            "5.7",
+            "4.5",
+            "2.8",
+            "1.9",
+            "5.4",
+            "4.3",
+            "0.7",
+            null,
+            null,
+            null
+          ],
+          "row_total": null,
+          "snippet": "(단위:만개) 계 5.2 4.4 4.9 5.2 5.7 4.5 2.8 1.9 5.4 4.3 0.7 - - - 45.0"
+        }
+      },
+      "compact_format": true,
+      "hourly_db": [
+        {
+          "slot": "00",
+          "dispatch": 9000,
+          "arrival": 10000,
+          "total": 19000
+        },
+        {
+          "slot": "01",
+          "dispatch": null,
+          "arrival": 54000,
+          "total": 54000
+        },
+        {
+          "slot": "02",
+          "dispatch": 1000,
+          "arrival": 42000,
+          "total": 43000
+        },
+        {
+          "slot": "03",
+          "dispatch": null,
+          "arrival": 7000,
+          "total": 7000
+        },
+        {
+          "slot": "18",
+          "dispatch": 44000,
+          "arrival": null,
+          "total": 44000
+        },
+        {
+          "slot": "19",
+          "dispatch": 49000,
+          "arrival": null,
+          "total": 49000
+        },
+        {
+          "slot": "20",
+          "dispatch": 52000,
+          "arrival": null,
+          "total": 52000
+        },
+        {
+          "slot": "21",
+          "dispatch": 57000,
+          "arrival": null,
+          "total": 57000
+        },
+        {
+          "slot": "22",
+          "dispatch": 45000,
+          "arrival": null,
+          "total": 45000
+        },
+        {
+          "slot": "23",
+          "dispatch": 28000,
+          "arrival": null,
+          "total": 28000
+        }
+      ],
+      "kpi_line": "소통실적 : 45.0만개(발송: 33.7만개, 도착: 11.3만개, 잔량: 없음)",
+      "reparsed_validation": [
+        {
+          "rule_name": "dispatch_plus_arrival_equals_total",
+          "status": "PASS",
+          "details": {
+            "dispatch": 337000,
+            "arrival": 113000,
+            "total": 450000,
+            "expected": 450000
+          }
+        },
+        {
+          "rule_name": "hourly_sum_equals_total",
+          "status": "WARNING",
+          "details": {
+            "hourly_total": 398000,
+            "total": 450000
+          }
+        },
+        {
+          "rule_name": "sorted_lte_supply",
+          "status": "PASS",
+          "details": {
+            "sorted": 422356,
+            "supply": 433468
+          }
+        }
+      ],
+      "reparsed_hourly_sum": 398000,
+      "sorting": {
+        "supply": 433468,
+        "sorted": 422356,
+        "rate": 97.44
+      },
+      "quota": {
+        "standard": 123,
+        "actual": 235,
+        "difference": 112
+      }
+    },
+    {
+      "report_date": "2025-01-21",
+      "file_path": "C:\\Users\\buzru\\OneDrive\\바탕 화면\\cursor_imc\\imc operations dashboard\\data\\uploads\\중부권IMC 일일 소통결과 보고(25.01.21.화).pdf",
+      "report_format": "standard",
+      "daily": {
+        "total": 557000,
+        "dispatch": 384000,
+        "arrival": 173000,
+        "remaining": 0,
+        "dispatch_plus_arrival": 557000,
+        "raw_values": {
+          "total_volume": "55.7만개",
+          "dispatch_volume": "38.4만개",
+          "arrival_volume": "17.3만개",
+          "remaining_volume": "없음",
+          "national_volume": "187.3만"
+        }
+      },
+      "hourly_sum": 504000,
+      "hourly_diff": 53000,
+      "validation_issues": [
+        {
+          "rule": "hourly_sum_equals_total",
+          "status": "WARNING",
+          "details": {
+            "hourly_total": 504000,
+            "total": 557000
+          }
+        }
+      ],
+      "hourly_parse": {
+        "dispatch": {
+          "matched": true,
+          "raw_len": 15,
+          "raw": [
+            "4.2",
+            "5.1",
+            "5.3",
+            "5.5",
+            "5.3",
+            "4.8",
+            "5.3",
+            "2.5",
+            "0.4",
+            null,
+            null,
+            null,
+            null,
+            null,
+            "38.4"
+          ],
+          "aligned": [
+            "5.1",
+            "5.3",
+            "5.5",
+            "5.3",
+            "4.8",
+            "5.3",
+            "2.5",
+            "0.4",
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "row_total": null,
+          "snippet": "처리 발송 4.2 5.1 5.3 5.5 5.3 4.8 5.3 2.5 0.4 - - - - - 38.4 2"
+        },
+        "arrival": {
+          "matched": true,
+          "raw_len": 15,
+          "raw": [
+            "1.1",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "3.6",
+            "4.8",
+            "4.2",
+            "2.5",
+            "1.0",
+            "0.1",
+            "17.3"
+          ],
+          "aligned": [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "3.6",
+            "4.8",
+            "4.2",
+            "2.5",
+            "1.0",
+            "0.1"
+          ],
+          "row_total": null,
+          "snippet": "도착 1.1 - - - - - - - 3.6 4.8 4.2 2.5 1.0 0.1 17.3 3"
+        },
+        "total": {
+          "matched": true,
+          "raw_len": 15,
+          "raw": [
+            "5.3",
+            "5.1",
+            "5.3",
+            "5.5",
+            "5.3",
+            "4.8",
+            "5.3",
+            "2.5",
+            "4.0",
+            "4.8",
+            "4.2",
+            "2.5",
+            "1.0",
+            "0.1",
+            "55.7"
+          ],
+          "aligned": [
+            "5.1",
+            "5.3",
+            "5.5",
+            "5.3",
+            "4.8",
+            "5.3",
+            "2.5",
+            "4.0",
+            "4.8",
+            "4.2",
+            "2.5",
+            "1.0",
+            "0.1"
+          ],
+          "row_total": null,
+          "snippet": "(단위:만개) 계 5.3 5.1 5.3 5.5 5.3 4.8 5.3 2.5 4.0 4.8 4.2 2.5 1.0 0.1 55.7"
+        }
+      },
+      "compact_format": true,
+      "hourly_db": [
+        {
+          "slot": "00",
+          "dispatch": 25000,
+          "arrival": null,
+          "total": 25000
+        },
+        {
+          "slot": "01",
+          "dispatch": 4000,
+          "arrival": 36000,
+          "total": 40000
+        },
+        {
+          "slot": "02",
+          "dispatch": null,
+          "arrival": 48000,
+          "total": 48000
+        },
+        {
+          "slot": "03",
+          "dispatch": null,
+          "arrival": 42000,
+          "total": 42000
+        },
+        {
+          "slot": "04",
+          "dispatch": null,
+          "arrival": 25000,
+          "total": 25000
+        },
+        {
+          "slot": "05",
+          "dispatch": null,
+          "arrival": 10000,
+          "total": 10000
+        },
+        {
+          "slot": "06",
+          "dispatch": null,
+          "arrival": 1000,
+          "total": 1000
+        },
+        {
+          "slot": "18",
+          "dispatch": 51000,
+          "arrival": null,
+          "total": 51000
+        },
+        {
+          "slot": "19",
+          "dispatch": 53000,
+          "arrival": null,
+          "total": 53000
+        },
+        {
+          "slot": "20",
+          "dispatch": 55000,
+          "arrival": null,
+          "total": 55000
+        },
+        {
+          "slot": "21",
+          "dispatch": 53000,
+          "arrival": null,
+          "total": 53000
+        },
+        {
+          "slot": "22",
+          "dispatch": 48000,
+          "arrival": null,
+          "total": 48000
+        },
+        {
+          "slot": "23",
+          "dispatch": 53000,
+          "arrival": null,
+          "total": 53000
+        }
+      ],
+      "kpi_line": "소통실적 : 55.7만개(발송: 38.4만개, 도착: 17.3만개, 잔량: 없음)",
+      "reparsed_validation": [
+        {
+          "rule_name": "dispatch_plus_arrival_equals_total",
+          "status": "PASS",
+          "details": {
+            "dispatch": 384000,
+            "arrival": 173000,
+            "total": 557000,
+            "expected": 557000
+          }
+        },
+        {
+          "rule_name": "hourly_sum_equals_total",
+          "status": "WARNING",
+          "details": {
+            "hourly_total": 504000,
+            "total": 557000
+          }
+        },
+        {
+          "rule_name": "sorted_lte_supply",
+          "status": "PASS",
+          "details": {
+            "sorted": 515322,
+            "supply": 525487
+          }
+        }
+      ],
+      "reparsed_hourly_sum": 504000,
+      "sorting": {
+        "supply": 525487,
+        "sorted": 515322,
+        "rate": 98.07
+      }
+    },
+    {
+      "report_date": "2025-02-05",
+      "file_path": "C:\\Users\\buzru\\OneDrive\\바탕 화면\\cursor_imc\\imc operations dashboard\\data\\uploads\\중부권IMC 일일 소통결과 보고(25.02.05.수).pdf",
+      "report_format": "standard",
+      "daily": {
+        "total": 362000,
+        "dispatch": 266000,
+        "arrival": 96000,
+        "remaining": 0,
+        "dispatch_plus_arrival": 362000,
+        "raw_values": {
+          "total_volume": "36.2만개",
+          "dispatch_volume": "26.6만개",
+          "arrival_volume": "9.6만개",
+          "remaining_volume": "없음",
+          "national_volume": "95.2만"
+        }
+      },
+      "hourly_sum": 426000,
+      "hourly_diff": -64000,
+      "validation_issues": [
+        {
+          "rule": "hourly_sum_equals_total",
+          "status": "WARNING",
+          "details": {
+            "hourly_total": 426000,
+            "total": 362000
+          }
+        }
+      ],
+      "hourly_parse": {
+        "dispatch": {
+          "matched": true,
+          "raw_len": 13,
+          "raw": [
+            "0.5",
+            "3.5",
+            "4.0",
+            "4.4",
+            "4.1",
+            "3.7",
+            "5.1",
+            "1.3",
+            null,
+            null,
+            null,
+            null,
+            "46.4"
+          ],
+          "aligned": [
+            null,
+            null,
+            null,
+            null,
+            null,
+            "0.5",
+            "3.5",
+            "4.0",
+            "4.4",
+            "4.1",
+            "3.7",
+            "5.1",
+            "1.3"
+          ],
+          "row_total": null,
+          "snippet": "\n발송 0.5 3.5 4.0 4.4 4.1 3.7 5.1 1.3 - - - - 46.4"
+        },
+        "arrival": {
+          "matched": true,
+          "raw_len": 13,
+          "raw": [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "1.0",
+            "5.2",
+            "3.3",
+            "0.1",
+            null,
+            "18.0"
+          ],
+          "aligned": [
+            null,
+            "1.0",
+            "5.2",
+            "3.3",
+            "0.1",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "row_total": null,
+          "snippet": "도착 - - - - - - - 1.0 5.2 3.3 0.1 - 18.0"
+        },
+        "total": {
+          "matched": true,
+          "raw_len": 13,
+          "raw": [
+            "0.5",
+            "3.5",
+            "4.0",
+            "4.4",
+            "4.1",
+            "3.7",
+            "5.1",
+            "2.3",
+            "5.2",
+            "3.3",
+            "0.1",
+            null,
+            "64.4"
+          ],
+          "aligned": [
+            "0.5",
+            "3.5",
+            "4.0",
+            "4.4",
+            "4.1",
+            "3.7",
+            "5.1",
+            "2.3",
+            "5.2",
+            "3.3",
+            "0.1",
+            null,
+            null
+          ],
+          "row_total": null,
+          "snippet": "(단위:만개) 계 0.5 3.5 4.0 4.4 4.1 3.7 5.1 2.3 5.2 3.3 0.1 - 64.4"
+        }
+      },
+      "compact_format": true,
+      "hourly_db": [
+        {
+          "slot": "00",
+          "dispatch": 35000,
+          "arrival": 16000,
+          "total": 51000
+        },
+        {
+          "slot": "01",
+          "dispatch": 40000,
+          "arrival": null,
+          "total": 23000
+        },
+        {
+          "slot": "02",
+          "dispatch": 44000,
+          "arrival": 8000,
+          "total": 52000
+        },
+        {
+          "slot": "03",
+          "dispatch": 41000,
+          "arrival": null,
+          "total": 33000
+        },
+        {
+          "slot": "04",
+          "dispatch": 37000,
+          "arrival": null,
+          "total": 1000
+        },
+        {
+          "slot": "05",
+          "dispatch": 51000,
+          "arrival": null,
+          "total": 51000
+        },
+        {
+          "slot": "06",
+          "dispatch": 13000,
+          "arrival": null,
+          "total": 13000
+        },
+        {
+          "slot": "18",
+          "dispatch": null,
+          "arrival": 5000,
+          "total": 5000
+        },
+        {
+          "slot": "19",
+          "dispatch": null,
+          "arrival": 35000,
+          "total": 35000
+        },
+        {
+          "slot": "20",
+          "dispatch": null,
+          "arrival": 40000,
+          "total": 40000
+        },
+        {
+          "slot": "21",
+          "dispatch": null,
+          "arrival": 44000,
+          "total": 44000
+        },
+        {
+          "slot": "22",
+          "dispatch": null,
+          "arrival": 41000,
+          "total": 41000
+        },
+        {
+          "slot": "23",
+          "dispatch": 5000,
+          "arrival": 32000,
+          "total": 37000
+        }
+      ],
+      "kpi_line": "소통실적 : 36.2만개(발송: 26.6만개, 도착: 9.6만개, 잔량: 없음)",
+      "reparsed_validation": [
+        {
+          "rule_name": "dispatch_plus_arrival_equals_total",
+          "status": "PASS",
+          "details": {
+            "dispatch": 266000,
+            "arrival": 96000,
+            "total": 362000,
+            "expected": 362000
+          }
+        },
+        {
+          "rule_name": "hourly_sum_equals_total",
+          "status": "WARNING",
+          "details": {
+            "hourly_total": 426000,
+            "total": 362000
+          }
+        },
+        {
+          "rule_name": "sorted_lte_supply",
+          "status": "PASS",
+          "details": {
+            "sorted": 341453,
+            "supply": 350407
+          }
+        }
+      ],
+      "reparsed_hourly_sum": 426000,
+      "sorting": {
+        "supply": 350407,
+        "sorted": 341453,
+        "rate": 97.44
+      },
+      "quota": {
+        "standard": 107,
+        "actual": 195,
+        "difference": 88
+      }
+    },
+    {
+      "report_date": "2025-10-10",
+      "file_path": "C:\\Users\\buzru\\OneDrive\\바탕 화면\\cursor_imc\\imc operations dashboard\\data\\uploads\\중부권IMC 일일 소통결과 보고(25.10.10.금).pdf",
+      "report_format": "standard",
+      "daily": {
+        "total": 505000,
+        "dispatch": 367000,
+        "arrival": 136000,
+        "remaining": null,
+        "dispatch_plus_arrival": 503000,
+        "raw_values": {
+          "total_volume": "50.5만개",
+          "dispatch_volume": "36.7만개",
+          "arrival_volume": "13.6만개",
+          "remaining_volume": "5.5만개 *",
+          "national_volume": "160.3만"
+        }
+      },
+      "hourly_sum": 500000,
+      "hourly_diff": 5000,
+      "validation_issues": [
+        {
+          "rule": "dispatch_plus_arrival_equals_total",
+          "status": "FAIL",
+          "details": {
+            "dispatch": 367000,
+            "arrival": 136000,
+            "total": 505000,
+            "expected": 503000
+          }
+        },
+        {
+          "rule": "hourly_sum_equals_total",
+          "status": "WARNING",
+          "details": {
+            "hourly_total": 500000,
+            "total": 505000
+          }
+        }
+      ],
+      "hourly_parse": {
+        "dispatch": {
+          "matched": true,
+          "raw_len": 15,
+          "raw": [
+            "0.5",
+            "3.6",
+            "4.9",
+            "5.2",
+            "5.0",
+            "4.8",
+            "5.9",
+            "4.1",
+            "2.6",
+            "0.1",
+            null,
+            null,
+            null,
+            null,
+            "36.7"
+          ],
+          "aligned": [
+            "3.6",
+            "4.9",
+            "5.2",
+            "5.0",
+            "4.8",
+            "5.9",
+            "4.1",
+            "2.6",
+            "0.1",
+            null,
+            null,
+            null,
+            null
+          ],
+          "row_total": null,
+          "snippet": "\n발송 0.5 3.6 4.9 5.2 5.0 4.8 5.9 4.1 2.6 0.1 - - - - 36.7"
+        },
+        "arrival": {
+          "matched": true,
+          "raw_len": 15,
+          "raw": [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "2.7",
+            "5.0",
+            "4.3",
+            "1.8",
+            null,
+            null,
+            "13.8"
+          ],
+          "aligned": [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "2.7",
+            "5.0",
+            "4.3",
+            "1.8",
+            null,
+            null
+          ],
+          "row_total": null,
+          "snippet": "도착 - - - - - - - - 2.7 5.0 4.3 1.8 - - 13.8"
+        },
+        "total": {
+          "matched": true,
+          "raw_len": 15,
+          "raw": [
+            "0.5",
+            "3.6",
+            "4.9",
+            "5.2",
+            "5.0",
+            "4.8",
+            "5.9",
+            "4.1",
+            "5.3",
+            "5.1",
+            "4.3",
+            "1.8",
+            null,
+            null,
+            "50.5"
+          ],
+          "aligned": [
+            "3.6",
+            "4.9",
+            "5.2",
+            "5.0",
+            "4.8",
+            "5.9",
+            "4.1",
+            "5.3",
+            "5.1",
+            "4.3",
+            "1.8",
+            null,
+            null
+          ],
+          "row_total": null,
+          "snippet": "(단위:만개) 계 0.5 3.6 4.9 5.2 5.0 4.8 5.9 4.1 5.3 5.1 4.3 1.8 - - 50.5"
+        }
+      },
+      "compact_format": true,
+      "hourly_db": [
+        {
+          "slot": "00",
+          "dispatch": 41000,
+          "arrival": null,
+          "total": 41000
+        },
+        {
+          "slot": "01",
+          "dispatch": 26000,
+          "arrival": 27000,
+          "total": 53000
+        },
+        {
+          "slot": "02",
+          "dispatch": 1000,
+          "arrival": 50000,
+          "total": 51000
+        },
+        {
+          "slot": "03",
+          "dispatch": null,
+          "arrival": 43000,
+          "total": 43000
+        },
+        {
+          "slot": "04",
+          "dispatch": null,
+          "arrival": 18000,
+          "total": 18000
+        },
+        {
+          "slot": "18",
+          "dispatch": 36000,
+          "arrival": null,
+          "total": 36000
+        },
+        {
+          "slot": "19",
+          "dispatch": 49000,
+          "arrival": null,
+          "total": 49000
+        },
+        {
+          "slot": "20",
+          "dispatch": 52000,
+          "arrival": null,
+          "total": 52000
+        },
+        {
+          "slot": "21",
+          "dispatch": 50000,
+          "arrival": null,
+          "total": 50000
+        },
+        {
+          "slot": "22",
+          "dispatch": 48000,
+          "arrival": null,
+          "total": 48000
+        },
+        {
+          "slot": "23",
+          "dispatch": 59000,
+          "arrival": null,
+          "total": 59000
+        }
+      ],
+      "kpi_line": "소통실적 : 50.5만개(발송: 36.7만개, 도착: 13.6만개, 잔량: 5.5만개 *)",
+      "reparsed_validation": [
+        {
+          "rule_name": "dispatch_plus_arrival_equals_total",
+          "status": "FAIL",
+          "details": {
+            "dispatch": 367000,
+            "arrival": 136000,
+            "total": 505000,
+            "expected": 503000
+          }
+        },
+        {
+          "rule_name": "hourly_sum_equals_total",
+          "status": "WARNING",
+          "details": {
+            "hourly_total": 500000,
+            "total": 505000
+          }
+        },
+        {
+          "rule_name": "sorted_lte_supply",
+          "status": "PASS",
+          "details": {
+            "sorted": 417336,
+            "supply": 425330
+          }
+        }
+      ],
+      "reparsed_hourly_sum": 500000,
+      "sorting": {
+        "supply": 425330,
+        "sorted": 417336,
+        "rate": 98.12
+      }
+    },
+    {
+      "report_date": "2025-12-12",
+      "file_path": "C:\\Users\\buzru\\OneDrive\\바탕 화면\\cursor_imc\\imc operations dashboard\\data\\uploads\\중부권IMC 일일 소통결과 보고(25.12.12.금).pdf",
+      "report_format": "standard",
+      "daily": {
+        "total": 294000,
+        "dispatch": 214000,
+        "arrival": 80000,
+        "remaining": 0,
+        "dispatch_plus_arrival": 294000,
+        "raw_values": {
+          "total_volume": "29.4만개",
+          "dispatch_volume": "21.4만개",
+          "arrival_volume": "8.0만개",
+          "remaining_volume": "없음",
+          "national_volume": "74.3만"
+        }
+      },
+      "hourly_sum": 294000,
+      "hourly_diff": 0,
+      "validation_issues": [
+        {
+          "rule": "sorted_lte_supply",
+          "status": "FAIL",
+          "details": {
+            "sorted": 274975,
+            "supply": 268988
+          }
+        }
+      ],
+      "hourly_parse": {
+        "dispatch": {
+          "matched": true,
+          "raw_len": 15,
+          "raw": [
+            null,
+            "2.1",
+            "2.8",
+            "3.5",
+            "3.6",
+            "3.0",
+            "3.4",
+            "2.4",
+            "0.5",
+            "0.1",
+            null,
+            null,
+            null,
+            null,
+            "21.4"
+          ],
+          "aligned": [
+            "2.1",
+            "2.8",
+            "3.5",
+            "3.6",
+            "3.0",
+            "3.4",
+            "2.4",
+            "0.5",
+            "0.1",
+            null,
+            null,
+            null,
+            null
+          ],
+          "row_total": null,
+          "snippet": "\n발송 - 2.1 2.8 3.5 3.6 3.0 3.4 2.4 0.5 0.1 - - - - 21.4"
+        },
+        "arrival": {
+          "matched": true,
+          "raw_len": 15,
+          "raw": [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "0.4",
+            "3.0",
+            "3.4",
+            "1.2",
+            null,
+            null,
+            null,
+            "8.0"
+          ],
+          "aligned": [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "0.4",
+            "3.0",
+            "3.4",
+            "1.2",
+            null,
+            null,
+            null
+          ],
+          "row_total": null,
+          "snippet": "도착 - - - - - - - 0.4 3.0 3.4 1.2 - - - 8.0"
+        },
+        "total": {
+          "matched": true,
+          "raw_len": 15,
+          "raw": [
+            null,
+            "2.1",
+            "2.8",
+            "3.5",
+            "3.6",
+            "3.0",
+            "3.4",
+            "2.8",
+            "3.5",
+            "3.5",
+            "1.2",
+            null,
+            null,
+            null,
+            "29.4"
+          ],
+          "aligned": [
+            "2.1",
+            "2.8",
+            "3.5",
+            "3.6",
+            "3.0",
+            "3.4",
+            "2.8",
+            "3.5",
+            "3.5",
+            "1.2",
+            null,
+            null,
+            null
+          ],
+          "row_total": null,
+          "snippet": "(단위:만개) 계 - 2.1 2.8 3.5 3.6 3.0 3.4 2.8 3.5 3.5 1.2 - - - 29.4"
+        }
+      },
+      "compact_format": true,
+      "hourly_db": [
+        {
+          "slot": "00",
+          "dispatch": 24000,
+          "arrival": 4000,
+          "total": 28000
+        },
+        {
+          "slot": "01",
+          "dispatch": 5000,
+          "arrival": 30000,
+          "total": 35000
+        },
+        {
+          "slot": "02",
+          "dispatch": 1000,
+          "arrival": 34000,
+          "total": 35000
+        },
+        {
+          "slot": "03",
+          "dispatch": null,
+          "arrival": 12000,
+          "total": 12000
+        },
+        {
+          "slot": "18",
+          "dispatch": 21000,
+          "arrival": null,
+          "total": 21000
+        },
+        {
+          "slot": "19",
+          "dispatch": 28000,
+          "arrival": null,
+          "total": 28000
+        },
+        {
+          "slot": "20",
+          "dispatch": 35000,
+          "arrival": null,
+          "total": 35000
+        },
+        {
+          "slot": "21",
+          "dispatch": 36000,
+          "arrival": null,
+          "total": 36000
+        },
+        {
+          "slot": "22",
+          "dispatch": 30000,
+          "arrival": null,
+          "total": 30000
+        },
+        {
+          "slot": "23",
+          "dispatch": 34000,
+          "arrival": null,
+          "total": 34000
+        }
+      ],
+      "kpi_line": "소통실적 : 29.4만개(발송: 21.4만개, 도착: 8.0만개, 잔량: 없음)",
+      "reparsed_validation": [
+        {
+          "rule_name": "dispatch_plus_arrival_equals_total",
+          "status": "PASS",
+          "details": {
+            "dispatch": 214000,
+            "arrival": 80000,
+            "total": 294000,
+            "expected": 294000
+          }
+        },
+        {
+          "rule_name": "hourly_sum_equals_total",
+          "status": "PASS",
+          "details": {
+            "hourly_total": 294000,
+            "total": 294000
+          }
+        },
+        {
+          "rule_name": "sorted_lte_supply",
+          "status": "FAIL",
+          "details": {
+            "sorted": 274975,
+            "supply": 268988
+          }
+        }
+      ],
+      "reparsed_hourly_sum": 294000,
+      "sorting": {
+        "supply": 268988,
+        "sorted": 274975,
+        "rate": 102.23
+      }
+    },
+    {
+      "report_date": "2026-02-10",
+      "file_path": "C:\\Users\\buzru\\OneDrive\\바탕 화면\\cursor_imc\\imc operations dashboard\\data\\uploads\\중부권IMC 일일 소통결과 보고(26.02.10.화).pdf",
+      "report_format": "standard",
+      "daily": {
+        "total": 482000,
+        "dispatch": 337000,
+        "arrival": 145000,
+        "remaining": 0,
+        "dispatch_plus_arrival": 482000,
+        "raw_values": {
+          "total_volume": "48.2만개",
+          "dispatch_volume": "33.7만개",
+          "arrival_volume": "14.5만개",
+          "remaining_volume": "없음",
+          "national_volume": "170.7만"
+        }
+      },
+      "hourly_sum": 429000,
+      "hourly_diff": 53000,
+      "validation_issues": [
+        {
+          "rule": "hourly_sum_equals_total",
+          "status": "WARNING",
+          "details": {
+            "hourly_total": 429000,
+            "total": 482000
+          }
+        }
+      ],
+      "hourly_parse": {
+        "dispatch": {
+          "matched": true,
+          "raw_len": 15,
+          "raw": [
+            "4.0",
+            "4.3",
+            "4.5",
+            "4.3",
+            "4.8",
+            "4.6",
+            "5.0",
+            "1.9",
+            "0.2",
+            "0.1",
+            null,
+            null,
+            null,
+            null,
+            "33.7"
+          ],
+          "aligned": [
+            "4.3",
+            "4.5",
+            "4.3",
+            "4.8",
+            "4.6",
+            "5.0",
+            "1.9",
+            "0.2",
+            "0.1",
+            null,
+            null,
+            null,
+            null
+          ],
+          "row_total": null,
+          "snippet": "\n발송 4.0 4.3 4.5 4.3 4.8 4.6 5.0 1.9 0.2 0.1 - - - - 33.7"
+        },
+        "arrival": {
+          "matched": true,
+          "raw_len": 15,
+          "raw": [
+            "1.3",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "1.0",
+            "4.5",
+            "4.2",
+            "3.0",
+            "0.5",
+            null,
+            null,
+            "14.5"
+          ],
+          "aligned": [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "1.0",
+            "4.5",
+            "4.2",
+            "3.0",
+            "0.5",
+            null,
+            null
+          ],
+          "row_total": null,
+          "snippet": "도착 1.3 - - - - - - 1.0 4.5 4.2 3.0 0.5 - - 14.5"
+        },
+        "total": {
+          "matched": true,
+          "raw_len": 15,
+          "raw": [
+            "5.3",
+            "4.3",
+            "4.5",
+            "4.3",
+            "4.8",
+            "4.6",
+            "5.0",
+            "2.9",
+            "4.7",
+            "4.3",
+            "3.0",
+            "0.5",
+            null,
+            null,
+            "48.2"
+          ],
+          "aligned": [
+            "4.3",
+            "4.5",
+            "4.3",
+            "4.8",
+            "4.6",
+            "5.0",
+            "2.9",
+            "4.7",
+            "4.3",
+            "3.0",
+            "0.5",
+            null,
+            null
+          ],
+          "row_total": null,
+          "snippet": "(단위:만개) 계 5.3 4.3 4.5 4.3 4.8 4.6 5.0 2.9 4.7 4.3 3.0 0.5 - - 48.2"
+        }
+      },
+      "compact_format": true,
+      "hourly_db": [
+        {
+          "slot": "00",
+          "dispatch": 19000,
+          "arrival": 10000,
+          "total": 29000
+        },
+        {
+          "slot": "01",
+          "dispatch": 2000,
+          "arrival": 45000,
+          "total": 47000
+        },
+        {
+          "slot": "02",
+          "dispatch": 1000,
+          "arrival": 42000,
+          "total": 43000
+        },
+        {
+          "slot": "03",
+          "dispatch": null,
+          "arrival": 30000,
+          "total": 30000
+        },
+        {
+          "slot": "04",
+          "dispatch": null,
+          "arrival": 5000,
+          "total": 5000
+        },
+        {
+          "slot": "18",
+          "dispatch": 43000,
+          "arrival": null,
+          "total": 43000
+        },
+        {
+          "slot": "19",
+          "dispatch": 45000,
+          "arrival": null,
+          "total": 45000
+        },
+        {
+          "slot": "20",
+          "dispatch": 43000,
+          "arrival": null,
+          "total": 43000
+        },
+        {
+          "slot": "21",
+          "dispatch": 48000,
+          "arrival": null,
+          "total": 48000
+        },
+        {
+          "slot": "22",
+          "dispatch": 46000,
+          "arrival": null,
+          "total": 46000
+        },
+        {
+          "slot": "23",
+          "dispatch": 50000,
+          "arrival": null,
+          "total": 50000
+        }
+      ],
+      "kpi_line": "소통실적 : 48.2만개(발송: 33.7만개, 도착: 14.5만개, 잔량: 없음)",
+      "reparsed_validation": [
+        {
+          "rule_name": "dispatch_plus_arrival_equals_total",
+          "status": "PASS",
+          "details": {
+            "dispatch": 337000,
+            "arrival": 145000,
+            "total": 482000,
+            "expected": 482000
+          }
+        },
+        {
+          "rule_name": "hourly_sum_equals_total",
+          "status": "WARNING",
+          "details": {
+            "hourly_total": 429000,
+            "total": 482000
+          }
+        },
+        {
+          "rule_name": "sorted_lte_supply",
+          "status": "PASS",
+          "details": {
+            "sorted": 444910,
+            "supply": 455577
+          }
+        }
+      ],
+      "reparsed_hourly_sum": 429000,
+      "sorting": {
+        "supply": 455577,
+        "sorted": 444910,
+        "rate": 97.66
+      }
+    },
+    {
+      "report_date": "2026-04-26",
+      "file_path": "C:\\Users\\buzru\\OneDrive\\바탕 화면\\cursor_imc\\imc operations dashboard\\data\\uploads\\중부권IMC 일일 소통결과 보고(26.04.26.일).pdf",
+      "report_format": "compact",
+      "daily": {
+        "total": 31581,
+        "dispatch": 29721,
+        "arrival": 4512,
+        "remaining": 0,
+        "dispatch_plus_arrival": 34233,
+        "raw_values": {
+          "total_volume": "31,581개",
+          "dispatch_volume": "29,721개",
+          "arrival_volume": "4,512개",
+          "remaining_volume": "없음",
+          "national_volume": null
+        }
+      },
+      "hourly_sum": 32000,
+      "hourly_diff": -419,
+      "validation_issues": [
+        {
+          "rule": "dispatch_plus_arrival_equals_total",
+          "status": "FAIL",
+          "details": {
+            "dispatch": 29721,
+            "arrival": 4512,
+            "total": 31581,
+            "expected": 34233
+          }
+        },
+        {
+          "rule": "hourly_sum_equals_total",
+          "status": "WARNING",
+          "details": {
+            "hourly_total": 32000,
+            "total": 31581
+          }
+        }
+      ],
+      "hourly_parse": {
+        "dispatch": {
+          "matched": true,
+          "raw_len": 3,
+          "raw": [
+            "1.5",
+            "1.2",
+            "0.3"
+          ],
+          "aligned": [
+            null,
+            "1.5",
+            "1.2",
+            "0.3",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "row_total": null,
+          "snippet": "\n발 송 1.5 1.2 0.3 3"
+        },
+        "arrival": {
+          "matched": true,
+          "raw_len": 3,
+          "raw": [
+            "0.1",
+            "0.1",
+            "0.2"
+          ],
+          "aligned": [
+            null,
+            "0.1",
+            "0.1",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "row_total": null,
+          "snippet": "배 분 0.1 0.1 0.2"
+        },
+        "total": {
+          "matched": true,
+          "raw_len": 15,
+          "raw": [
+            "0",
+            "0",
+            "1.5",
+            "1.2",
+            "0.3",
+            "0.1",
+            "0.1",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "3.2"
+          ],
+          "aligned": [
+            "0",
+            "1.5",
+            "1.2",
+            "0.3",
+            "0.1",
+            "0.1",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0"
+          ],
+          "row_total": null,
+          "snippet": "소 계 0 0 1.5 1.2 0.3 0.1 0.1 0 0 0 0 0 0 0 3.2"
+        }
+      },
+      "compact_format": true,
+      "hourly_db": [
+        {
+          "slot": "19",
+          "dispatch": 15000,
+          "arrival": null,
+          "total": 15000
+        },
+        {
+          "slot": "20",
+          "dispatch": 12000,
+          "arrival": null,
+          "total": 12000
+        },
+        {
+          "slot": "21",
+          "dispatch": 3000,
+          "arrival": null,
+          "total": 3000
+        },
+        {
+          "slot": "22",
+          "dispatch": null,
+          "arrival": 1000,
+          "total": 1000
+        },
+        {
+          "slot": "23",
+          "dispatch": null,
+          "arrival": 1000,
+          "total": 1000
+        }
+      ],
+      "kpi_line": "소통물량 : 총 31,581개 (발송 29,721 배분 4,512) (단위: 개)",
+      "reparsed_validation": [
+        {
+          "rule_name": "dispatch_plus_arrival_equals_total",
+          "status": "FAIL",
+          "details": {
+            "dispatch": 29721,
+            "arrival": 4512,
+            "total": 31581,
+            "expected": 34233
+          }
+        },
+        {
+          "rule_name": "hourly_sum_equals_total",
+          "status": "WARNING",
+          "details": {
+            "hourly_total": 32000,
+            "total": 31581
+          }
+        },
+        {
+          "rule_name": "sorted_lte_supply",
+          "status": "PASS",
+          "details": {
+            "sorted": 29526,
+            "supply": 31284
+          }
+        }
+      ],
+      "reparsed_hourly_sum": 32000,
+      "sorting": {
+        "supply": 31284,
+        "sorted": 29526,
+        "rate": 94.38
+      }
+    }
+  ]
+}
