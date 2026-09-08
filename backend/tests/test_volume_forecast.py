@@ -135,6 +135,7 @@ class VolumeForecastTests(unittest.TestCase):
                 tomorrow_weekday_label="화",
                 tomorrow_day_type="weekday",
                 forecast_volume=542.3,
+                forecast_national_volume=612.8,
                 weekday_average=529.8,
                 recent_7d_average=518.2,
                 recent_30d_average=512.0,
@@ -151,6 +152,8 @@ class VolumeForecastTests(unittest.TestCase):
             )
         )
         self.assertIn("542.3천개", text)
+        self.assertIn("612.8천개", text)
+        self.assertIn("전국접수물량", text)
         self.assertIn("화", text)
         self.assertIn("Seasonal Naive", text)
         self.assertIn("4주 평균", text)
@@ -188,6 +191,20 @@ class VolumeForecastTests(unittest.TestCase):
     def test_estimate_staff_for_volume(self):
         staff = estimate_staff_for_volume(550.0, 500.0, 170.0)
         self.assertEqual(staff, 187.0)
+
+    def test_forecast_national_volume_uses_seasonal_baseline(self):
+        forecast = forecast_national_volume(
+            target_day_type="weekday",
+            seasonal_naive_1w=600.0,
+            seasonal_naive_4w=590.0,
+            same_type_baseline=585.0,
+            same_type_avg_7d=580.0,
+            today_volume=610.0,
+            today_type_avg_7d=600.0,
+        )
+        self.assertIsNotNone(forecast)
+        assert forecast is not None
+        self.assertGreater(forecast, 580.0)
 
 
 if __name__ == "__main__":

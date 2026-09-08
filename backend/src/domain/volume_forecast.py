@@ -60,6 +60,7 @@ class VolumeForecastResult:
     seasonal_naive_4w: float | None = None
     forecast_method: str = "seasonal_naive_ensemble"
     operation_period_labels: tuple[str, ...] = ()
+    forecast_national_volume: float | None = None
 
 
 def resolve_forecast_target_date(report_day: date) -> date:
@@ -167,6 +168,49 @@ def _build_fallback_ensemble(
     return _weighted_average(parts)
 
 
+def forecast_national_volume(
+    *,
+    target_day_type: str,
+    seasonal_naive_1w: float | None = None,
+    seasonal_naive_4w: float | None = None,
+    same_type_baseline: float | None = None,
+    same_type_avg_7d: float | None = None,
+    today_volume: float | None = None,
+    today_type_avg_7d: float | None = None,
+) -> float | None:
+    base, _ = _build_seasonal_ensemble(
+        target_day_type=target_day_type,
+        seasonal_naive_1w=seasonal_naive_1w,
+        seasonal_naive_4w=seasonal_naive_4w,
+        same_type_baseline=same_type_baseline,
+        weekday_average=same_type_baseline,
+    )
+    if base is None:
+        base = same_type_avg_7d or seasonal_naive_4w or seasonal_naive_1w
+    if base is None:
+        return None
+
+    trend_reference = today_type_avg_7d if today_type_avg_7d is not None else same_type_avg_7d
+    drift_factor = _damped_drift_factor(today_volume, trend_reference)
+    combined_trend = 1.0 + (drift_factor - 1.0) * WEEKDAY_DRIFT_WEIGHT / 0.15
+    return round(base * combined_trend, 1)
+
+
+def _format_forecast_volume_lead(
+    *,
+    weekday_label: str,
+    day_type_label: str,
+    target_hint: str,
+    forecast_volume: float,
+    forecast_national_volume: float | None,
+) -> str:
+    volume_part = f"예상 처리물량은 약 {forecast_volume:,.1f}천개"
+    if forecast_national_volume is not None:
+        volume_part += f", 예상 전국접수물량은 약 {forecast_national_volume:,.1f}천개"
+    volume_part += "입니다."
+    return f"전망일({weekday_label}·{day_type_label}){target_hint}{volume_part}"
+
+
 def forecast_next_day_volume(
     report_date: str,
     *,
@@ -187,6 +231,12 @@ def forecast_next_day_volume(
     today_type_avg_7d: float | None = None,
     seasonal_naive_1w: float | None = None,
     seasonal_naive_4w: float | None = None,
+    national_seasonal_naive_1w: float | None = None,
+    national_seasonal_naive_4w: float | None = None,
+    same_type_national_baseline: float | None = None,
+    same_type_national_avg_7d: float | None = None,
+    today_national_volume: float | None = None,
+    today_type_national_avg_7d: float | None = None,
     operation_periods: list[dict] | None = None,
     historical_no_parcel_avg: float | None = None,
     volume_by_date: dict[str, float] | None = None,
@@ -323,6 +373,15 @@ def forecast_next_day_volume(
         seasonal_naive_4w=seasonal_naive_4w,
         forecast_method=method,
         operation_period_labels=period_labels,
+        forecast_national_volume=forecast_national_volume(
+            target_day_type=resolved_day_type,
+            seasonal_naive_1w=national_seasonal_naive_1w,
+            seasonal_naive_4w=national_seasonal_naive_4w,
+            same_type_baseline=same_type_national_baseline,
+            same_type_avg_7d=same_type_national_avg_7d,
+            today_volume=today_national_volume,
+            today_type_avg_7d=today_type_national_avg_7d,
+        ),
     )
 
 
@@ -333,9 +392,12 @@ def build_volume_forecast_text(result: VolumeForecastResult) -> str:
         if result.forecast_target_note
         else ""
     )
-    lead = (
-        f"전망일({result.tomorrow_weekday_label}·{day_type_label}){target_hint} "
-        f"예상 처리물량은 약 {result.forecast_volume:,.1f}천개입니다."
+    lead = _format_forecast_volume_lead(
+        weekday_label=result.tomorrow_weekday_label,
+        day_type_label=day_type_label,
+        target_hint=target_hint,
+        forecast_volume=result.forecast_volume,
+        forecast_national_volume=result.forecast_national_volume,
     )
 
     detail_parts: list[str] = []

@@ -2338,7 +2338,7 @@ class SqliteRepository:
         with self._connect() as conn:
             rows = conn.execute(
                 """
-                SELECT ds.report_date, ds.total_volume
+                SELECT ds.report_date, ds.total_volume, ds.national_volume
                 FROM daily_summary ds
                 WHERE ds.report_date <= ?
                 ORDER BY ds.report_date DESC
@@ -2372,12 +2372,27 @@ class SqliteRepository:
                 return None
             return self._to_thousand(sum(values) / len(values))
 
+        def avg_national_thousand(subset: list[sqlite3.Row]) -> float | None:
+            values = [
+                row["national_volume"]
+                for row in subset
+                if row["national_volume"] is not None
+            ]
+            if not values:
+                return None
+            return self._to_thousand(sum(values) / len(values))
+
         past_rows = [row for row in rows if row["report_date"] != report_date]
         target_rows = [row for row in past_rows if matches_target(row)]
         today_rows = [row for row in past_rows if matches_today(row)]
 
         today_row = next((row for row in rows if row["report_date"] == report_date), None)
         today_volume = self._to_thousand(today_row["total_volume"]) if today_row else None
+        today_national_volume = (
+            self._to_thousand(today_row["national_volume"])
+            if today_row and today_row["national_volume"] is not None
+            else None
+        )
 
         recent_chronological = [
             self._to_thousand(row["total_volume"])
@@ -2388,6 +2403,11 @@ class SqliteRepository:
         seasonal_naive_1w = (
             self._to_thousand(target_rows[0]["total_volume"])
             if target_rows and target_rows[0]["total_volume"] is not None
+            else None
+        )
+        national_seasonal_naive_1w = (
+            self._to_thousand(target_rows[0]["national_volume"])
+            if target_rows and target_rows[0]["national_volume"] is not None
             else None
         )
 
@@ -2409,14 +2429,20 @@ class SqliteRepository:
             "forecastTargetNote": forecast_target_note_for(report_day, target),
             "tomorrowDayType": target_day_type,
             "todayVolume": today_volume,
+            "todayNationalVolume": today_national_volume,
             "sameTypeBaseline": avg_thousand(target_rows[:30]),
+            "sameTypeNationalBaseline": avg_national_thousand(target_rows[:30]),
             "sameTypeSampleCount": min(len(target_rows), 30),
             "sameTypeAvg7d": avg_thousand(target_rows[:7]),
+            "sameTypeNationalAvg7d": avg_national_thousand(target_rows[:7]),
             "sameTypeAvg30d": avg_thousand(target_rows[:30]),
             "sameTypeRecent7d": recent_chronological,
             "todayTypeAvg7d": avg_thousand(today_rows[:7]),
+            "todayTypeNationalAvg7d": avg_national_thousand(today_rows[:7]),
             "seasonalNaive1w": seasonal_naive_1w,
+            "nationalSeasonalNaive1w": national_seasonal_naive_1w,
             "seasonalNaive4w": avg_thousand(target_rows[:4]),
+            "nationalSeasonalNaive4w": avg_national_thousand(target_rows[:4]),
             "operationPeriods": operation_periods,
             "targetOperationPeriodLabels": operation_period_labels(target_periods),
             "historicalNoParcelAvg": historical_no_parcel_avg,

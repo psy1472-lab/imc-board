@@ -20,6 +20,7 @@ from domain.operation_period import (
 from domain.volume_forecast import (
     DAY_TYPE_LABELS,
     WEEKDAY_LABELS,
+    _format_forecast_volume_lead,
     forecast_target_note_for,
     resolve_forecast_target_date,
 )
@@ -99,6 +100,7 @@ class VolumeMlForecastResult:
     seasonal_naive_4w: float | None = None
     ml_volume: float | None = None
     bias_adjustment: float = 0.0
+    forecast_national_volume: float | None = None
 
 
 class RegressorLike(Protocol):
@@ -605,6 +607,7 @@ def predict_next_volume(
             )
 
     volume_by_date: dict[str, float] = {}
+    national_by_date: dict[str, float] = {}
     report_dates: list[date] = []
     volume_history: list[float] = []
     anchor_row: VolumeMlRow | None = None
@@ -615,6 +618,10 @@ def predict_next_volume(
             continue
         thousand = _to_thousand(row.total_volume) or 0.0
         volume_by_date[row.report_date.isoformat()] = thousand
+        if row.national_volume is not None:
+            national_thousand = _to_thousand(row.national_volume)
+            if national_thousand is not None:
+                national_by_date[row.report_date.isoformat()] = national_thousand
         report_dates.append(row.report_date)
         if row.report_date.isoformat() <= anchor_key:
             volume_history.append(thousand)
@@ -638,6 +645,7 @@ def predict_next_volume(
         return None
 
     baseline_4w = seasonal_naive_4w or _baseline_same_weekday_4w(volume_by_date, target_day)
+    forecast_national_volume = _baseline_same_weekday_4w(national_by_date, target_day)
     feature_vector = build_feature_vector(
         anchor_row.report_date,
         target_day,
@@ -710,6 +718,7 @@ def predict_next_volume(
                 seasonal_naive_4w=baseline_4w,
                 ml_volume=ml_raw,
                 bias_adjustment=bias,
+                forecast_national_volume=forecast_national_volume,
             )
 
         ml_weight = _tune_blend_weight(
@@ -752,6 +761,7 @@ def predict_next_volume(
         seasonal_naive_4w=baseline_4w,
         ml_volume=ml_raw,
         bias_adjustment=bias,
+        forecast_national_volume=forecast_national_volume,
     )
 
 
@@ -762,9 +772,12 @@ def build_ml_volume_forecast_text(result: VolumeMlForecastResult) -> str:
         if result.forecast_target_note
         else ""
     )
-    lead = (
-        f"전망일({result.target_weekday_label}·{day_type_label}){target_hint}"
-        f"예상 처리물량은 약 {result.forecast_volume:,.1f}천개입니다."
+    lead = _format_forecast_volume_lead(
+        weekday_label=result.target_weekday_label,
+        day_type_label=day_type_label,
+        target_hint=target_hint,
+        forecast_volume=result.forecast_volume,
+        forecast_national_volume=result.forecast_national_volume,
     )
 
     metric_text = ", ".join(
