@@ -61,6 +61,23 @@ npm run dev
 
 **환경변수**: [`.env.example`](.env.example), [`frontend/.env.example`](frontend/.env.example)
 
+## Railway (Backend)
+
+**방법 A (권장)** — Root Directory **비움**:
+- Dockerfile: 루트 `Dockerfile`
+- `railway.toml` 자동 적용
+
+**방법 B** — Root Directory **`backend`**:
+- Dockerfile: `backend/Dockerfile`
+- `backend/railway.toml` 자동 적용
+
+공통 env:
+- `DATA_DIR=/app/data`, Volume `/app/data`
+- `DATABASE_URL=sqlite:////app/data/imc_dashboard.db`
+- `IMC_ADMIN_PASSWORD`, `CORS_ORIGINS`
+
+배포 후 **Deployments → Redeploy** 로 최신 커밋 반영 확인.
+
 ## 검증
 
 ```powershell

@@ -1,0 +1,17 @@
+.git
+.github
+.cursor
+data/
+frontend/node_modules/
+frontend/dist/
+backend/.venv/
+**/__pycache__/
+**/*.pyc
+**/*.db
+**/*.db-*
+.env
+frontend/.env
+samples/
+docs/
+*.md
+!backend/migrations/*.sql

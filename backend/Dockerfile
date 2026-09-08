@@ -1,3 +1,4 @@
+# Build context: backend/ (Railway Root Directory = backend)
 FROM python:3.12-slim
 
 WORKDIR /app
