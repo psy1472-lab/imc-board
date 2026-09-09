@@ -41,6 +41,37 @@ def test_strip_compact_row_subtotal():
     assert extractor._strip_compact_row_subtotal(["0.1", "0.1", "0.2"], None) == ["0.1", "0.1"]
 
 
+def test_hourly_dispatch_from_truncated_table_cell():
+    """09-08처럼 표 셀이 '리 발송'으로 잘려도 만개 행을 발송으로 읽는다."""
+    table_cell = (
+        "리 발송 - 2.2 3.4 2.9 3.6 3.3 4.4 4.9 1.3 - - - - - 26.0\n"
+        "량 도착 1.0 - - - - - - - 1.6 4.0 3.5 1.3 0.2 - 11.6\n"
+        "위:만개) 계 1.0 2.2 3.4 2.9 3.6 3.3 4.4 4.9 2.9 4.0 3.5 1.3 0.2 - 37.6"
+    )
+    document = PdfDocument(
+        path="26.09.08.pdf",
+        pages=[
+            PdfPage(
+                index=0,
+                text=(
+                    "시간대별 처리 및 인력투입 현황\n"
+                    "구 분 ~18 18~ 19~ 20~ 21~ 22~ 23~ 0~ 1~ 2~ 3~ 4~ 5~ 6~ 합계\n"
+                    "발송 35 33 29 23 13 4 - - - - - - - - 137\n"
+                ),
+                tables=[[[None, None, table_cell]]],
+            )
+        ],
+    )
+    hourly, _ = DailyKpiExtractor().extract_hourly(document, date(2026, 9, 8))
+    by_slot = {item.hour_slot: item for item in hourly}
+    assert by_slot["18"].dispatch_volume == 22000
+    assert by_slot["00"].dispatch_volume == 49000
+    assert by_slot["~18"].arrival_volume == 10000
+    assert by_slot["02"].arrival_volume == 40000
+    assert sum(item.dispatch_volume or 0 for item in hourly) == 260000
+    assert sum(item.arrival_volume or 0 for item in hourly) == 116000
+
+
 def test_compact_hourly_alignment():
     extractor = DailyKpiExtractor()
     hourly, _ = extractor.extract_hourly(_compact_document(), date(2026, 4, 26), profile=COMPACT_PROFILE)

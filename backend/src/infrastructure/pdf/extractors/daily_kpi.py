@@ -172,11 +172,12 @@ class DailyKpiExtractor:
 
         text = document.pages[0].text
         section = self._extract_hourly_section(text)
+        table_section = self._hourly_table_text(document)
         compact = profile.is_compact
 
-        dispatch_match = self._match_hour_row(section, "dispatch")
-        arrival_match = self._match_hour_row(section, "arrival")
-        total_match = self._match_hour_row(section, "total")
+        dispatch_match = self._match_volume_hour_row(section, table_section, "dispatch")
+        arrival_match = self._match_volume_hour_row(section, table_section, "arrival")
+        total_match = self._match_volume_hour_row(section, table_section, "total")
 
         dispatch_raw = self._strip_compact_row_subtotal(
             self._clean_hour_values(
@@ -349,13 +350,28 @@ class DailyKpiExtractor:
                 return index
         return 1
 
+    def _hourly_table_text(self, document: PdfDocument) -> str:
+        lines: list[str] = []
+        for page in document.pages[:2]:
+            for table in page.tables:
+                for row in table:
+                    line = " ".join(str(cell).replace("\n", " ") for cell in row if cell)
+                    if line.strip():
+                        lines.append(line)
+        return "\n".join(lines)
+
+    def _looks_like_man_volume_row(self, values: str) -> bool:
+        return bool(re.search(r"\d+\.\d+", values))
+
     def _match_hour_row(self, section: str, row_type: str) -> re.Match[str] | None:
         patterns = {
             "dispatch": [
                 r"처리\s*발송\s+((?:[\d.\-]+\s+)+[\d.\-]+)(?:\s+([\d.]+))?",
-                r"(?:^|\n)발\s*송\s+((?:[\d.\-]+\s+)+[\d.\-]+)(?:\s+([\d.]+))?",
+                # pdfplumber가 '처'를 잘라도 '발송 - 2.2 ...' 형태는 남는다.
+                r"발\s*송\s+((?:[\d.\-]+\s+)+[\d.\-]+)(?:\s+([\d.]+))?",
             ],
             "arrival": [
+                r"처리\s*(?:도착|배\s*분)\s+((?:[\d.\-]+\s+)+[\d.\-]+)(?:\s+([\d.]+))?",
                 r"(?:도착|배\s*분)\s+((?:[\d.\-]+\s+)+[\d.\-]+)(?:\s+([\d.]+))?",
             ],
             "total": [
@@ -364,10 +380,18 @@ class DailyKpiExtractor:
             ],
         }
         for pattern in patterns[row_type]:
-            match = re.search(pattern, section)
-            if match:
-                return match
+            for match in re.finditer(pattern, section):
+                if row_type == "total" or self._looks_like_man_volume_row(match.group(1)):
+                    return match
         return None
+
+    def _match_volume_hour_row(
+        self,
+        section: str,
+        table_section: str,
+        row_type: str,
+    ) -> re.Match[str] | None:
+        return self._match_hour_row(section, row_type) or self._match_hour_row(table_section, row_type)
 
     def _clean_hour_values(self, values: list[str | None]) -> list[str | None]:
         cleaned = list(values)
