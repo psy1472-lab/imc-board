@@ -36,7 +36,10 @@ class DailyKpiExtractor:
 
         national_volume, national_raw = self._extract_national_volume(text)
 
-        productivity_match = re.search(r"평균\s*인시당\s*처리\s*물량:\s*([\d.]+)개", text)
+        productivity_match = re.search(
+            r"평균\s*인시당\s*처리\s*물량\s*[:：]\s*([\d.]+)\s*개?",
+            text,
+        )
         productivity = (
             float(re.sub(r"\.{2,}", ".", productivity_match.group(1)))
             if productivity_match
@@ -195,45 +198,45 @@ class DailyKpiExtractor:
             self._parse_hour_row(total_match.group(1) if total_match else "")
         )
 
-        total_values = self._align_hour_values(
+        total_stripped = self._strip_compact_row_subtotal(
             total_raw,
             total_match.group(2) if total_match else None,
-            sparse=False,
         )
-
-        if compact:
-            dispatch_values, arrival_values = self._align_compact_sparse_rows(
+        if not compact and self._has_omitted_hour_dashes(dispatch_raw, arrival_raw, total_stripped):
+            dispatch_values, arrival_values, total_values = self._align_omitted_dash_volume_rows(
                 dispatch_raw,
                 arrival_raw,
-                total_values,
+                total_stripped,
             )
         else:
-            dispatch_values = self._align_hour_values(
-                dispatch_raw,
-                dispatch_match.group(2) if dispatch_match else None,
+            total_values = self._align_hour_values(
+                total_raw,
+                total_match.group(2) if total_match else None,
                 sparse=False,
             )
-            arrival_values = self._align_hour_values(
-                arrival_raw,
-                arrival_match.group(2) if arrival_match else None,
-                sparse=False,
-            )
+            if compact:
+                dispatch_values, arrival_values = self._align_compact_sparse_rows(
+                    dispatch_raw,
+                    arrival_raw,
+                    total_values,
+                )
+            else:
+                dispatch_values = self._align_hour_values(
+                    dispatch_raw,
+                    dispatch_match.group(2) if dispatch_match else None,
+                    sparse=False,
+                )
+                arrival_values = self._align_hour_values(
+                    arrival_raw,
+                    arrival_match.group(2) if arrival_match else None,
+                    sparse=False,
+                )
 
-        staff_match = re.search(
-            r"⑪소포계[^\d]*((?:[\d.\-]+\s+)+[\d.\-]+)",
-            text,
-        )
-        prod_match = re.search(
-            r"인시당 처리물량\(처리물량/⑪\)\(개\)\s+((?:[\d.\-]+\s+)+[\d.\-]+)",
-            text,
-        )
-        staff_values = self._align_hour_values(
-            self._parse_hour_row(staff_match.group(1) if staff_match else ""),
-            sparse=False,
-        )
-        prod_values = self._align_hour_values(
-            self._parse_hour_row(prod_match.group(1) if prod_match else ""),
-            sparse=False,
+        staff_raw, prod_raw = self._extract_staffing_hour_rows(table_section, text)
+        staff_values, prod_values = self._align_staff_prod_values(
+            staff_raw,
+            prod_raw,
+            total_values,
         )
 
         hourly: list[HourlyThroughput] = []
@@ -359,6 +362,159 @@ class DailyKpiExtractor:
                     if line.strip():
                         lines.append(line)
         return "\n".join(lines)
+
+    def _has_omitted_hour_dashes(
+        self,
+        dispatch_values: list[str | None],
+        arrival_values: list[str | None],
+        total_values: list[str | None],
+    ) -> bool:
+        if None in dispatch_values or None in arrival_values or None in total_values:
+            return False
+        slot_count = len(self.HOUR_SLOTS)
+        return (
+            0 < len(total_values) < slot_count
+            or 0 < len(dispatch_values) < slot_count
+            or 0 < len(arrival_values) < slot_count
+        )
+
+    def _align_omitted_dash_volume_rows(
+        self,
+        dispatch_raw: list[str | None],
+        arrival_raw: list[str | None],
+        total_raw: list[str | None],
+    ) -> tuple[list[str | None], list[str | None], list[str | None]]:
+        slot_count = len(self.HOUR_SLOTS)
+        dispatch = [value for value in dispatch_raw if value is not None]
+        arrival = [value for value in arrival_raw if value is not None]
+        total = [value for value in total_raw if value is not None]
+
+        total_aligned = [None] * slot_count
+        if len(total) == slot_count:
+            total_aligned = list(total)
+        elif len(total) == slot_count - 1:
+            if dispatch and self._values_match(total[0], dispatch[0]):
+                total_aligned = total + [None]
+            else:
+                total_aligned = [None] + total
+        else:
+            total_aligned = self._align_hour_values(total_raw)
+
+        dispatch_aligned = [None] * slot_count
+        if dispatch:
+            start = 0
+            for index, value in enumerate(total_aligned):
+                if value is not None and self._values_match(value, dispatch[0]):
+                    start = index
+                    break
+            for offset, value in enumerate(dispatch):
+                slot_index = start + offset
+                if slot_index < slot_count:
+                    dispatch_aligned[slot_index] = value
+
+        arrival_aligned = [None] * slot_count
+        if arrival:
+            filled = [index for index, value in enumerate(total_aligned) if value is not None]
+            last_index = filled[-1] if filled else slot_count - 1
+            start = max(0, last_index - len(arrival) + 1)
+            for offset, value in enumerate(arrival):
+                slot_index = start + offset
+                if slot_index < slot_count:
+                    arrival_aligned[slot_index] = value
+
+        return dispatch_aligned, arrival_aligned, total_aligned
+
+    def _extract_staffing_hour_rows(self, table_section: str, text: str) -> tuple[list[str | None], list[str | None]]:
+        staff_match = self._match_staffing_numbers(
+            table_section,
+            text,
+            [
+                r"실제\s*근무\s*인력\([^)]*\)\s*\(\s*명\s*\)\s+((?:-?\d+(?:\.\d+)?\s+)+-?\d+(?:\.\d+)?)",
+                r"근무\s*인력\([^)]*⑦[^)]*\)[^\d\-]*((?:[\d.\-]+\s+)+[\d.\-]+)",
+            ],
+        )
+        prod_match = self._match_staffing_numbers(
+            table_section,
+            text,
+            [
+                r"인시당\s*처리물량\s*\(\s*처리물량\s*/[^)]*\)\s*\(\s*개\s*\)\s+((?:[\d.\-]+\s+)+[\d.\-]+)",
+                r"인시당\s*처리물량\(처리물량/⑪\)\(개\)\s+((?:[\d.\-]+\s+)+[\d.\-]+)",
+            ],
+        )
+        if staff_match is None:
+            staff_match = re.search(r"⑪소포계[^\d]*((?:[\d.\-]+\s+)+[\d.\-]+)", text)
+        staff_values = self._parse_hour_row(staff_match.group(1) if staff_match else "")[: len(self.HOUR_SLOTS)]
+        prod_values = self._parse_hour_row(prod_match.group(1) if prod_match else "")[: len(self.HOUR_SLOTS)]
+        return staff_values, prod_values
+
+    def _match_staffing_numbers(
+        self,
+        table_section: str,
+        text: str,
+        patterns: list[str],
+    ) -> re.Match[str] | None:
+        for blob in (table_section, text):
+            for pattern in patterns:
+                match = re.search(pattern, blob)
+                if match:
+                    tokens = match.group(1).split()
+                    if 8 <= len(tokens) <= 16:
+                        return match
+        return None
+
+    def _align_staff_prod_values(
+        self,
+        staff_raw: list[str | None],
+        prod_raw: list[str | None],
+        total_values: list[str | None],
+    ) -> tuple[list[str | None], list[str | None]]:
+        staff_candidates = self._short_row_alignments(staff_raw)
+        prod_candidates = self._short_row_alignments(prod_raw)
+        volumes = [self._to_volume(value) for value in total_values]
+        best_staff = staff_candidates[0]
+        best_prod = prod_candidates[0]
+        best_score = -1
+        for staff in staff_candidates:
+            for prod in prod_candidates:
+                score = self._staff_prod_alignment_score(staff, prod, volumes)
+                if score > best_score:
+                    best_score = score
+                    best_staff = staff
+                    best_prod = prod
+        return best_staff, best_prod
+
+    def _short_row_alignments(self, values: list[str | None]) -> list[list[str | None]]:
+        cleaned = [value for value in values if value is not None]
+        slot_count = len(self.HOUR_SLOTS)
+        if not cleaned:
+            return [[None] * slot_count]
+        if len(cleaned) == slot_count:
+            return [cleaned]
+        if len(cleaned) == slot_count - 1:
+            return [cleaned + [None], [None] + cleaned]
+        if len(cleaned) == slot_count - 2:
+            return [[None] + cleaned + [None], [None, None] + cleaned, cleaned + [None, None]]
+        padded = cleaned + [None] * (slot_count - len(cleaned))
+        return [padded[:slot_count], [None] * (slot_count - len(cleaned)) + cleaned]
+
+    def _staff_prod_alignment_score(
+        self,
+        staff_row: list[str | None],
+        prod_row: list[str | None],
+        volumes: list[int | None],
+    ) -> int:
+        score = 0
+        for index, volume in enumerate(volumes):
+            staff = self._to_int(staff_row[index] if index < len(staff_row) else None)
+            productivity = self._to_float(prod_row[index] if index < len(prod_row) else None)
+            if not volume or not staff or staff <= 0 or productivity is None:
+                continue
+            expected = volume / staff
+            if abs(expected - productivity) / max(productivity, 1) <= 0.25:
+                score += 2
+            elif abs(expected - productivity) / max(productivity, 1) <= 0.4:
+                score += 1
+        return score
 
     def _looks_like_man_volume_row(self, values: str) -> bool:
         return bool(re.search(r"\d+\.\d+", values))

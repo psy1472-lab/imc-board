@@ -48,6 +48,16 @@ class QuotaExchangeExtractor:
         parts = match.group(1).split()
         if len(parts) >= 7:
             standard = to_int_or_zero(parts[0])
+            # 기준 … 초과 계 회차: 마지막이 회차(0 근처)이고 계-기준=초과
+            maybe_actual = to_int_or_zero(parts[5])
+            maybe_difference = to_int_or_zero(parts[4])
+            maybe_round = to_int_or_zero(parts[6])
+            if (
+                maybe_actual > 0
+                and abs(maybe_round) <= 2
+                and maybe_actual - standard == maybe_difference
+            ):
+                return standard, maybe_actual, maybe_difference
             difference = to_int_or_zero(parts[3])
             actual = to_int_or_zero(parts[6])
             return standard, actual, difference

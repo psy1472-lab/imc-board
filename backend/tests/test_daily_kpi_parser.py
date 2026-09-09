@@ -72,6 +72,64 @@ def test_hourly_dispatch_from_truncated_table_cell():
     assert sum(item.arrival_volume or 0 for item in hourly) == 116000
 
 
+def test_hourly_omitted_dashes_and_staffing_from_2025_01_02():
+    """01-02처럼 빈 칸 대시가 생략되면 발송은 앞, 도착은 뒤에 맞춘다."""
+    table_cell = (
+        "구 분 ~18 18~ 19~ 20~ 21~ 22~ 23~ 0~ 1~ 2~ 3~ 4~ 5~ 6~ 합계\n"
+        "처리 발송 (단위:만개) 발송 0.4 3.8 4.5 4.9 4.9 4.3 5.6 5.5 2.7 36.6\n"
+        "도착 1.6 5.6 4.6 0.9 0.1 12.8\n"
+        "계 0.4 3.8 4.5 4.9 4.9 4.3 5.6 5.5 4.3 5.6 4.6 0.9 0.1 49.4\n"
+        "실제근무 인력(⑦-⑧+⑨+⑩-⑪)(명) 6 174 248 248 248 115 217 288 286 255 260 189 23\n"
+        "인시당 처리물량(처리물량/⑪)(개) 220 182 200 196 370 256 190 152 218 178 46 49\n"
+    )
+    document = PdfDocument(
+        path="25.01.02.pdf",
+        pages=[
+            PdfPage(
+                index=0,
+                text=(
+                    "시간대별 처리 및 인력투입 현황 (평균 인시당 처리 물량: 193.23)\n"
+                    "구 분 ~18 18~ 19~ 20~ 21~ 22~ 23~ 0~ 1~ 2~ 3~ 4~ 5~ 6~ 합계\n"
+                ),
+                tables=[[[None, None, table_cell]]],
+            )
+        ],
+    )
+    hourly, staffing = DailyKpiExtractor().extract_hourly(document, date(2025, 1, 2))
+    by_slot = {item.hour_slot: item for item in hourly}
+    staff_by_slot = {item.hour_slot: item for item in staffing}
+    assert by_slot["~18"].dispatch_volume == 4000
+    assert by_slot["~18"].arrival_volume is None
+    assert by_slot["01"].dispatch_volume == 27000
+    assert by_slot["01"].arrival_volume == 16000
+    assert by_slot["01"].total_volume == 43000
+    assert by_slot["05"].arrival_volume == 1000
+    assert by_slot["06"].total_volume is None
+    assert sum(item.total_volume or 0 for item in hourly) == 494000
+    assert staff_by_slot["~18"].actual_staff == 6
+    assert staff_by_slot["18"].actual_staff == 174
+    assert staff_by_slot["18"].productivity == 220
+    assert staff_by_slot["06"].actual_staff is None
+
+    _, _, summary = DailyKpiExtractor().extract(
+        PdfDocument(
+            path="25.01.02.pdf",
+            pages=[
+                PdfPage(
+                    index=0,
+                    text=(
+                        "중부권IMC 일일소통현황 보고('25.01.02.목)\n"
+                        "소통실적 : 49.4만개 (발송 36.6만개, 도착 12.8만개, 잔량 0.0만개)\n"
+                        "시간대별 처리 및 인력투입 현황 (평균 인시당 처리 물량: 193.23)\n"
+                    ),
+                    tables=[],
+                )
+            ],
+        )
+    )
+    assert summary.productivity == 193.23
+
+
 def test_compact_hourly_alignment():
     extractor = DailyKpiExtractor()
     hourly, _ = extractor.extract_hourly(_compact_document(), date(2026, 4, 26), profile=COMPACT_PROFILE)
@@ -161,6 +219,27 @@ def test_validator_dispatch_plus_arrival_pass():
     by_rule = {item["rule_name"]: item["status"] for item in logs}
     assert by_rule["dispatch_plus_arrival_equals_total"] == "PASS"
     assert by_rule["sorted_lte_supply"] == "PASS"
+
+
+def test_parse_quota_row_with_round_column():
+    from infrastructure.pdf.extractors.operations import QuotaExchangeExtractor
+
+    text = (
+        "교환 및 수지 쿼터 준수현황\n"
+        "구분 기준대수 (사전협의 추가) 제주D+2 기타(조달센터등) 초과 계 회차\n"
+        "쿼터 117 0 0 1 -7 110 0\n"
+        "교환 129 - -12 117 0\n"
+    )
+    extractor = QuotaExchangeExtractor()
+    standard, actual, difference = extractor._parse_quota_row(text, "쿼터")
+    assert standard == 117
+    assert actual == 110
+    assert difference == -7
+
+    exchange_standard, exchange_actual, exchange_difference = extractor._parse_quota_row(text, "교환")
+    assert exchange_standard == 129
+    assert exchange_actual == 117
+    assert exchange_difference == -12
 
 
 def test_parse_quota_row_extended_format():
