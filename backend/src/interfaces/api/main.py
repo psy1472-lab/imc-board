@@ -119,7 +119,10 @@ async def upload_report(
             ) from exc
         raise HTTPException(status_code=500, detail="DB 저장 실패") from exc
     except Exception as exc:
-        raise HTTPException(status_code=422, detail="PDF 파싱 실패") from exc
+        raise HTTPException(
+            status_code=422,
+            detail=f"PDF 처리 실패: {type(exc).__name__}: {exc}",
+        ) from exc
 
     return {
         "reportDate": report.report_date.isoformat(),

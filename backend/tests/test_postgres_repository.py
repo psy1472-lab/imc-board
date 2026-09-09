@@ -6,7 +6,7 @@ import os
 import unittest
 from decimal import Decimal
 
-from infrastructure.db.postgres_adapter import _normalize_value, translate_sql
+from infrastructure.db.postgres_adapter import _as_json_param, _normalize_value, adapt_params, translate_sql
 
 
 class PostgresAdapterTests(unittest.TestCase):
@@ -31,6 +31,14 @@ class PostgresAdapterTests(unittest.TestCase):
     def test_normalize_decimal_to_float(self) -> None:
         self.assertEqual(_normalize_value(Decimal("308.5")), 308.5)
         self.assertIsInstance(_normalize_value(Decimal("12.0")), float)
+
+    def test_adapt_daily_summary_raw_values_as_json(self) -> None:
+        sql = "INSERT INTO daily_summary (report_date, raw_values) VALUES (%s, %s)"
+        params = ("2026-09-08", '{"total_volume": "37.6만"}')
+        adapted = adapt_params(sql, params)
+        self.assertEqual(adapted[0], "2026-09-08")
+        dumped = _as_json_param({"total_volume": "37.6만"})
+        self.assertEqual(type(adapted[1]).__name__, type(dumped).__name__)
 
 
 @unittest.skipUnless(

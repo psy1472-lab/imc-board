@@ -10,6 +10,7 @@ from typing import Any
 
 import psycopg
 from psycopg.rows import dict_row
+from psycopg.types.json import Json
 
 
 def _normalize_value(value: Any) -> Any:
@@ -142,23 +143,24 @@ def translate_sql(sql: str) -> str:
     return translated.replace("?", "%s")
 
 
+def _as_json_param(value: Any) -> Any:
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except json.JSONDecodeError:
+            return value
+    if isinstance(value, (dict, list)):
+        return Json(value)
+    return value
+
+
 def adapt_params(sql: str, params: tuple[Any, ...] | list[Any]) -> tuple[Any, ...]:
     adapted = list(params)
     if "daily_summary" in sql and "raw_values" in sql and adapted:
         raw_index = 11 if len(adapted) >= 12 else len(adapted) - 1
-        value = adapted[raw_index]
-        if isinstance(value, str):
-            try:
-                adapted[raw_index] = json.loads(value)
-            except json.JSONDecodeError:
-                pass
+        adapted[raw_index] = _as_json_param(adapted[raw_index])
     if "validation_log" in sql and len(adapted) >= 4:
-        details = adapted[3]
-        if isinstance(details, str):
-            try:
-                adapted[3] = json.loads(details)
-            except json.JSONDecodeError:
-                pass
+        adapted[3] = _as_json_param(adapted[3])
     return tuple(adapted)
 
 
