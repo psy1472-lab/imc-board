@@ -23,7 +23,9 @@ export function DashboardLayout() {
   const { isAdmin, logout } = useAdminAuth();
   const { dates, selectedDate, setSelectedDate, compare, setCompareBasis, error } = useDashboardFilters();
   const headerRequests = useRequestGeneration();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(
+    () => window.matchMedia("(max-width: 768px)").matches,
+  );
   const [validationStatus, setValidationStatus] = useState<{
     severity: "PASS" | "WARNING" | "FAIL";
     label: string;

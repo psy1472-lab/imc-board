@@ -20,6 +20,12 @@
   box-sizing: border-box;
 }
 
+html,
+body,
+#root {
+  overflow-x: auto;
+}
+
 body {
   margin: 0;
   transition: background-color 0.2s ease, color 0.2s ease;
@@ -54,7 +60,26 @@ select, input {
 .imc-dashboard-shell {
   display: flex;
   min-height: 100vh;
-  overflow-x: clip;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: #64748b #e2e8f0;
+}
+
+.imc-dashboard-shell::-webkit-scrollbar,
+.imc-main::-webkit-scrollbar {
+  height: 10px;
+}
+
+.imc-dashboard-shell::-webkit-scrollbar-track,
+.imc-main::-webkit-scrollbar-track {
+  background: #e2e8f0;
+}
+
+.imc-dashboard-shell::-webkit-scrollbar-thumb,
+.imc-main::-webkit-scrollbar-thumb {
+  background: #64748b;
+  border-radius: 999px;
 }
 
 .imc-sidebar {
@@ -88,9 +113,9 @@ select, input {
 
 .imc-main {
   flex: 1;
-  min-width: 0;
+  min-width: 640px;
   padding: 24px;
-  overflow-x: clip;
+  overflow-x: auto;
 }
 
 .imc-main-header {
@@ -166,6 +191,7 @@ select, input {
   }
 
   .imc-main {
+    min-width: 0;
     padding: 20px;
   }
 }
