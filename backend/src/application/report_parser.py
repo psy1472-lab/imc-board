@@ -69,7 +69,7 @@ class ReportParser:
             safety_categories=safety_categories,
             safety_incidents=safety_incidents,
             anomalies=self._build_anomalies(
-                report_date, summary, quota, sorting, safety_incidents, profile
+                report_date, summary, quota, transport, sorting, safety_incidents, profile
             ),
         )
         report.validation_logs = self.validator.validate(report)
@@ -88,10 +88,17 @@ class ReportParser:
         report_date: date,
         summary,
         quota,
+        offices,
         sorting,
         safety_incidents,
         profile: FormatProfile,
     ) -> list[Anomaly]:
+        from domain.transport_quota import (
+            is_arrival_after_23,
+            office_count_volume_text,
+            quota_overage,
+        )
+
         anomalies: list[Anomaly] = []
 
         if (summary.remaining_volume or 0) == 0:
@@ -118,26 +125,38 @@ class ReportParser:
                 )
             )
 
-        if quota and quota.quarter_standard is not None and quota.quarter_actual is not None:
-            if quota.quarter_actual > quota.quarter_standard:
-                over = quota.quarter_actual - quota.quarter_standard
-                anomalies.append(
-                    Anomaly(
-                        report_date,
-                        "transport",
-                        "WARNING",
-                        f"쿼터 기준 {over}대 초과",
-                    )
-                )
-            else:
-                anomalies.append(
-                    Anomaly(
-                        report_date,
-                        "transport",
-                        "NORMAL",
-                        "쿼터 기준 준수",
-                    )
-                )
+        overage_offices = [
+            office
+            for office in offices
+            if (quota_overage(office.vehicles_actual, office.vehicles_standard) or 0) > 0
+        ]
+        delayed_offices = [
+            office
+            for office in offices
+            if is_arrival_after_23(
+                office.last_arrival_time,
+                volume=office.volume,
+                vehicles_actual=office.vehicles_actual,
+            )
+        ]
+        overage_volume = sum(office.volume or 0 for office in overage_offices)
+        delayed_volume = sum(office.volume or 0 for office in delayed_offices)
+        anomalies.append(
+            Anomaly(
+                report_date,
+                "transport",
+                "WARNING" if overage_offices else "NORMAL",
+                office_count_volume_text("쿼터 초과 집중국", len(overage_offices), overage_volume),
+            )
+        )
+        anomalies.append(
+            Anomaly(
+                report_date,
+                "transport",
+                "WARNING" if delayed_offices else "NORMAL",
+                office_count_volume_text("지연(23시초과) 집중국", len(delayed_offices), delayed_volume),
+            )
+        )
 
         if sorting and sorting.ips_rate is not None:
             if sorting.ips_rate >= 97:

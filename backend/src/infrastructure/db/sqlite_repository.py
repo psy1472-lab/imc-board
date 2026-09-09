@@ -12,7 +12,13 @@ from domain.operation_period import (
     get_operation_periods_for_date,
     operation_period_labels,
 )
-from domain.transport_quota import quota_overage, quota_status
+from domain.transport_quota import (
+    is_arrival_after_23,
+    office_count_volume_text,
+    office_status_label,
+    quota_overage,
+    quota_status,
+)
 from domain.volume_forecast import forecast_target_note_for, resolve_forecast_target_date
 from domain.entities import ParsedReport
 from domain.hour_slots import HOUR_SLOTS, format_hour_label, normalize_hour_slot
@@ -934,8 +940,16 @@ class SqliteRepository:
             return None
         return round((actual / standard) * 100, 1)
 
+    def _office_is_delayed(self, row: sqlite3.Row) -> bool:
+        return is_arrival_after_23(
+            row["last_arrival_time"],
+            volume=row["volume"],
+            vehicles_actual=row["vehicles_actual"],
+        )
+
     def _serialize_office_row(self, row: sqlite3.Row) -> dict:
         overage = quota_overage(row["vehicles_actual"], row["vehicles_standard"])
+        delayed = self._office_is_delayed(row)
         status = quota_status(row["vehicles_actual"], row["vehicles_standard"])
         return {
             "office": row["office_name"],
@@ -945,7 +959,9 @@ class SqliteRepository:
             "difference": overage,
             "arrivalTime": row["last_arrival_time"],
             "delayMinutes": overage if overage and overage > 0 else None,
+            "delayed": delayed,
             "status": status,
+            "statusLabel": office_status_label(overage=bool(overage and overage > 0), delayed=delayed),
         }
 
     def _office_is_quota_overage(self, row: sqlite3.Row) -> bool:
@@ -953,12 +969,8 @@ class SqliteRepository:
         return overage is not None and overage > 0
 
     def _transport_summary(self, quota: sqlite3.Row | None, offices: list[sqlite3.Row]) -> dict:
-        overage_count = sum(1 for row in offices if self._office_is_quota_overage(row))
-        delayed_count = sum(
-            1
-            for row in offices
-            if self._office_is_quota_overage(row)
-        )
+        overage_offices = [row for row in offices if self._office_is_quota_overage(row)]
+        delayed_offices = [row for row in offices if self._office_is_delayed(row)]
         total_volume = sum(row["volume"] or 0 for row in offices)
         return {
             "quarterActual": quota["quarter_actual"] if quota else None,
@@ -974,8 +986,10 @@ class SqliteRepository:
                 quota["exchange_standard"] if quota else None,
             ),
             "exchangeRemaining": quota["exchange_remaining"] if quota else None,
-            "overageOfficeCount": overage_count,
-            "delayedOfficeCount": delayed_count,
+            "overageOfficeCount": len(overage_offices),
+            "overageOfficeVolume": sum(row["volume"] or 0 for row in overage_offices),
+            "delayedOfficeCount": len(delayed_offices),
+            "delayedOfficeVolume": sum(row["volume"] or 0 for row in delayed_offices),
             "totalOfficeVolume": total_volume if offices else None,
             "officeCount": len(offices),
         }
@@ -1393,6 +1407,54 @@ class SqliteRepository:
             "source": row["source"],
         }
 
+    def _live_transport_anomalies(self, quota: sqlite3.Row | None, offices: list[sqlite3.Row]) -> list[dict]:
+        overage_offices = [row for row in offices if self._office_is_quota_overage(row)]
+        delayed_offices = [row for row in offices if self._office_is_delayed(row)]
+        overage_volume = sum(row["volume"] or 0 for row in overage_offices)
+        delayed_volume = sum(row["volume"] or 0 for row in delayed_offices)
+        return [
+            {
+                "severity": "WARNING" if overage_offices else "NORMAL",
+                "category": "transport",
+                "categoryLabel": "운송",
+                "message": office_count_volume_text(
+                    "쿼터 초과 집중국", len(overage_offices), overage_volume
+                ),
+            },
+            {
+                "severity": "WARNING" if delayed_offices else "NORMAL",
+                "category": "transport",
+                "categoryLabel": "운송",
+                "message": office_count_volume_text(
+                    "지연(23시초과) 집중국", len(delayed_offices), delayed_volume
+                ),
+            },
+        ]
+
+    def _merge_transport_anomalies(
+        self,
+        anomalies: list[sqlite3.Row] | list[dict],
+        quota: sqlite3.Row | None,
+        offices: list[sqlite3.Row],
+    ) -> list[dict]:
+        serialized = [
+            item if isinstance(item, dict) else self._serialize_anomaly_row(item)
+            for item in anomalies
+        ]
+        kept = [
+            item
+            for item in serialized
+            if item.get("category") != "transport"
+            or (
+                "쿼터" not in str(item.get("message") or "")
+                and "지연" not in str(item.get("message") or "")
+            )
+        ]
+        live = self._live_transport_anomalies(quota, offices)
+        volume = [item for item in kept if item.get("category") == "volume"]
+        rest = [item for item in kept if item.get("category") != "volume"]
+        return [*volume, *live, *rest]
+
     def _serialize_safety_category_row(self, row: sqlite3.Row) -> dict:
         return {
             "key": row["category"],
@@ -1597,6 +1659,14 @@ class SqliteRepository:
                 "SELECT * FROM anomaly WHERE report_date = ? ORDER BY id",
                 (report_date,),
             ).fetchall()
+            quota = conn.execute(
+                "SELECT * FROM quota_exchange WHERE report_date = ?",
+                (report_date,),
+            ).fetchone()
+            offices = conn.execute(
+                "SELECT * FROM transport_office WHERE report_date = ?",
+                (report_date,),
+            ).fetchall()
             trend_date_rows = conn.execute(
                 """
                 SELECT report_date
@@ -1649,7 +1719,7 @@ class SqliteRepository:
                 "incidentCount": len(incidents),
                 "incidents": [self._serialize_safety_incident_row(row) for row in incidents],
             },
-            "anomalies": [self._serialize_anomaly_row(row) for row in anomalies],
+            "anomalies": self._merge_transport_anomalies(anomalies, quota, offices),
             "benchmarks": {
                 "prevDay": self._safety_benchmark(incident_map, warning_map, pass_rate_map, prev_day_dates),
                 "avg7d": self._safety_benchmark(incident_map, warning_map, pass_rate_map, avg7),
@@ -2109,7 +2179,7 @@ class SqliteRepository:
                 (report_date,),
             ).fetchall()
             anomalies = conn.execute(
-                "SELECT * FROM anomaly WHERE report_date = ? LIMIT 5",
+                "SELECT * FROM anomaly WHERE report_date = ?",
                 (report_date,),
             ).fetchall()
             safety = conn.execute(
@@ -2268,14 +2338,7 @@ class SqliteRepository:
                     "value": peak_staff["actual_staff"] if peak_staff else None,
                 },
             },
-            "anomalies": [
-                {
-                    "severity": row["severity"],
-                    "category": row["category"],
-                    "message": row["message"],
-                }
-                for row in anomalies
-            ],
+            "anomalies": self._merge_transport_anomalies(anomalies, quota, offices),
             "equipment": {
                 "sortingRate": sorting["sorting_rate"] if sorting else None,
                 "ipsRate": sorting["ips_rate"] if sorting else None,

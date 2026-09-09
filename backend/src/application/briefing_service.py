@@ -318,22 +318,24 @@ class BriefingService:
             absolute_critical=90,
         )
         overage_count = summary.get("overageOfficeCount") or 0
-        overage_detail = self._transport_overage_detail(transport, anomalies)
+        overage_volume = int(summary.get("overageOfficeVolume") or 0)
         overage_assessment = self._assess_count_metric(
             overage_count,
             warning_at=1,
-            critical_at=3,
+            critical_at=15,
             label="쿼터 초과 집중국",
-            detail=overage_detail,
+            detail=self._transport_overage_detail(transport),
         )
         remaining = summary.get("exchangeRemaining")
         remaining_assessment = self._assess_remaining(remaining)
         delayed_count = summary.get("delayedOfficeCount") or 0
+        delayed_volume = int(summary.get("delayedOfficeVolume") or 0)
         delayed_assessment = self._assess_count_metric(
             delayed_count,
             warning_at=1,
-            critical_at=3,
-            label="지연 집중국",
+            critical_at=15,
+            label="지연(23시초과) 집중국",
+            detail=f"물량 {delayed_volume:,}개" if delayed_count else None,
         )
 
         items = [
@@ -356,10 +358,13 @@ class BriefingService:
                 "label": "쿼터 초과 집중국",
                 "value": overage_count,
                 "unit": "곳",
-                **overage_assessment,
+                **self._merge_item_text(
+                    overage_assessment,
+                    f"물량 {overage_volume:,}개" if overage_count else None,
+                ),
             },
             {
-                "label": "지연 집중국",
+                "label": "지연(23시초과) 집중국",
                 "value": delayed_count,
                 "unit": "곳",
                 **delayed_assessment,
@@ -638,18 +643,16 @@ class BriefingService:
             merged["text"] = " · ".join(unique_parts)
         return merged
 
-    def _transport_overage_detail(self, transport: dict, anomalies: list[dict]) -> str | None:
+    def _transport_overage_detail(self, transport: dict) -> str | None:
         parts: list[str] = []
-        for office in transport.get("quotaOverages", [])[:4]:
+        overages = transport.get("quotaOverages", [])
+        for office in overages[:4]:
             name = office.get("office")
             if name:
-                parts.append(f"{name} 쿼터 초과")
-        extra_count = len(transport.get("quotaOverages", [])) - 4
+                parts.append(name)
+        extra_count = len(overages) - 4
         if extra_count > 0:
             parts.append(f"외 {extra_count}곳")
-        for message in self._anomaly_category_messages(anomalies, "transport"):
-            if message not in " · ".join(parts):
-                parts.append(message)
         return self._join_messages(parts)
 
     def _benchmark_for(self, analysis: dict, compare_basis: str) -> dict:
@@ -997,7 +1000,7 @@ class BriefingService:
         if actual is None or standard is None:
             return None
         if actual > standard:
-            return f"쿼터 기준 대비 {actual - standard}대 초과 가능성이 있습니다."
+            return f"쿼터 운송 {actual}/{standard}대입니다."
         return "쿼터 기준 범위 내로 보입니다."
 
     def _ips_text(self, equipment_summary: dict) -> str | None:

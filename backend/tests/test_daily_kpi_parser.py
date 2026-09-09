@@ -283,6 +283,35 @@ def test_extract_quota_from_first_page_and_transport_from_attachment():
     assert offices[0].vehicles_standard == 4
 
 
+def test_extract_maritime_offices_with_dash_quota():
+    from infrastructure.pdf.extractors.operations import TransportExtractor
+
+    document = PdfDocument(
+        path="26.09.08.pdf",
+        pages=[
+            PdfPage(index=0, text="소통실적", tables=[]),
+            PdfPage(
+                index=1,
+                text=(
+                    "【붙임1】집중국별 쿼 터 발 송 현 황\n"
+                    "동서울집 7,852 4 4 4 0 23:53 68\n"
+                    "인천해상 - - 인천해상 599 2 599 2 - - 2 15:09 24\n"
+                    "평택해상 평택특송 632 1 632 1 - - 1 21:24 3\n"
+                ),
+                tables=[],
+            ),
+        ],
+    )
+    by_name = {item.office_name: item for item in TransportExtractor().extract(document, date(2026, 9, 8))}
+    assert by_name["인천해상"].vehicles_actual == 2
+    assert by_name["인천해상"].vehicles_standard == 0
+    assert by_name["인천해상"].volume == 599
+    assert by_name["인천해상"].status == "WARNING"
+    assert by_name["평택해상"].vehicles_actual == 1
+    assert by_name["평택해상"].vehicles_standard == 0
+    assert by_name["평택해상"].status == "WARNING"
+
+
 def test_parse_quota_row_with_dash_cells():
     from infrastructure.pdf.extractors.operations import QuotaExchangeExtractor
 

@@ -6,7 +6,9 @@ export type TransportOfficeRow = {
   difference?: number | null;
   arrivalTime?: string | null;
   delayMinutes?: number | null;
+  delayed?: boolean | null;
   status?: string | null;
+  statusLabel?: string | null;
 };
 
 export type TransportTrendSeries = {
@@ -44,7 +46,9 @@ export type TransportAnalysis = {
     exchangeComplianceRate?: number | null;
     exchangeRemaining?: number | null;
     overageOfficeCount?: number | null;
+    overageOfficeVolume?: number | null;
     delayedOfficeCount?: number | null;
+    delayedOfficeVolume?: number | null;
     totalOfficeVolume?: number | null;
     officeCount?: number | null;
   };

@@ -125,11 +125,14 @@ export default function TransportAnalysisPage() {
     {
       label: "쿼터 초과 집중국",
       value: `${data.summary.overageOfficeCount ?? 0}곳`,
+      sub: `물량 ${formatNumber(data.summary.overageOfficeVolume ?? 0)}개`,
       warning: (data.summary.overageOfficeCount ?? 0) > 0,
     },
     {
-      label: "지연/주의 집중국",
+      label: "지연(23시초과) 집중국",
       value: `${data.summary.delayedOfficeCount ?? 0}곳`,
+      sub: `물량 ${formatNumber(data.summary.delayedOfficeVolume ?? 0)}개`,
+      warning: (data.summary.delayedOfficeCount ?? 0) > 0,
     },
     {
       label: "총 집중국 물량",

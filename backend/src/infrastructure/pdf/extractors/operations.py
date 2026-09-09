@@ -80,8 +80,8 @@ class TransportExtractor:
     END_PATTERN = re.compile(
         r"(?P<imc_vol>\d{1,3}(?:,\d{3})+|\d+)\s+"
         r"(?P<imc_veh>\d+)\s+"
-        r"(?P<quota>\d+)\s+"
-        r"(?P<quota_daily>\d+)\s+"
+        r"(?P<quota>-|\d+)\s+"
+        r"(?P<quota_daily>-|\d+)\s+"
         r"(?P<difference>-?\d+)\s+"
         r"(?P<time>\d{2}:\d{2})"
         r"(?:\s+(?P<roll>[\d-]+)\s+(?P<flat>[\d-]+))?"
@@ -96,7 +96,13 @@ class TransportExtractor:
         offices: list[TransportOffice] = []
         for text in texts:
             offices.extend(self._extract_offices_from_text(text, report_date))
-        return offices
+        return self._dedupe_offices(offices)
+
+    def _dedupe_offices(self, offices: list[TransportOffice]) -> list[TransportOffice]:
+        unique: dict[str, TransportOffice] = {}
+        for office in offices:
+            unique.setdefault(office.office_name, office)
+        return list(unique.values())
 
     def _transport_page_texts(self, document: PdfDocument) -> list[str]:
         matched: list[str] = []
@@ -128,7 +134,7 @@ class TransportExtractor:
 
             match = matches[-1]
             vehicles_actual = int(match.group("imc_veh"))
-            vehicles_quota = int(match.group("quota_daily"))
+            vehicles_quota = self._dash_int(match.group("quota_daily"))
             arrival_time = match.group("time")
             volume_text = match.group("imc_vol").replace(",", "")
             volume = int(volume_text) if volume_text.isdigit() else None
@@ -148,6 +154,10 @@ class TransportExtractor:
                 )
             )
         return offices
+
+    @staticmethod
+    def _dash_int(raw: str) -> int:
+        return 0 if raw == "-" else int(raw)
 
 
 class SortingMachineExtractor:

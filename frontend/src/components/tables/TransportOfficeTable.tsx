@@ -7,9 +7,22 @@ type Props = {
   highlightOverages?: boolean;
 };
 
-function statusColor(status: string | null | undefined, palette: ReturnType<typeof useTheme>["palette"]) {
-  if (status === "WARNING") return palette.warning;
-  if (status === "CRITICAL") return palette.critical;
+function isOverageOffice(office: TransportOfficeRow) {
+  return office.status === "WARNING" || (office.difference ?? 0) > 0;
+}
+
+function statusLabel(office: TransportOfficeRow) {
+  if (office.statusLabel) return office.statusLabel;
+  const overage = isOverageOffice(office);
+  const delayed = Boolean(office.delayed);
+  if (overage && delayed) return "초과/지연";
+  if (overage) return "초과";
+  if (delayed) return "지연";
+  return "정상";
+}
+
+function statusColor(label: string, palette: ReturnType<typeof useTheme>["palette"]) {
+  if (label.includes("초과") || label.includes("지연")) return palette.warning;
   return palette.normal;
 }
 
@@ -36,15 +49,16 @@ export function TransportOfficeTable({ offices, highlightOverages = false }: Pro
         </thead>
         <tbody>
           {offices.map((office) => {
-            const isOverage = office.status === "WARNING";
+            const overage = isOverageOffice(office);
+            const label = statusLabel(office);
             const rowStyle =
-              highlightOverages && isOverage
+              highlightOverages && overage
                 ? { background: "rgba(234, 179, 8, 0.12)" }
                 : undefined;
 
             return (
               <tr key={office.office} style={rowStyle}>
-                <td style={{ padding: "10px 8px", fontWeight: isOverage ? 600 : 400 }}>{office.office}</td>
+                <td style={{ padding: "10px 8px", fontWeight: overage ? 600 : 400 }}>{office.office}</td>
                 <td style={{ padding: "10px 8px", textAlign: "right" }}>{formatNumber(office.volume)}</td>
                 <td style={{ padding: "10px 8px", textAlign: "center" }}>{office.vehiclesActual ?? "-"}</td>
                 <td style={{ padding: "10px 8px", textAlign: "center" }}>{office.vehiclesQuota ?? "-"}</td>
@@ -58,8 +72,8 @@ export function TransportOfficeTable({ offices, highlightOverages = false }: Pro
                   {office.difference ?? "-"}
                 </td>
                 <td style={{ padding: "10px 8px", textAlign: "center" }}>{office.arrivalTime ?? "-"}</td>
-                <td style={{ padding: "10px 8px", textAlign: "center", color: statusColor(office.status, palette) }}>
-                  {office.status === "WARNING" ? "주의" : "정상"}
+                <td style={{ padding: "10px 8px", textAlign: "center", color: statusColor(label, palette) }}>
+                  {label}
                 </td>
               </tr>
             );
