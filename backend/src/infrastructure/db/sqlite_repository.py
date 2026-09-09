@@ -1829,6 +1829,53 @@ class SqliteRepository:
             for row in rows
         ]
 
+    def get_report_ingested_at(self, report_date: str) -> str | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT ingested_at FROM report_metadata WHERE report_date = ?",
+                (report_date,),
+            ).fetchone()
+        if not row:
+            return None
+        return row["ingested_at"]
+
+    def get_dashboard_header(self, report_date: str) -> dict | None:
+        with self._connect() as conn:
+            summary = conn.execute(
+                """
+                SELECT remaining_volume, communication_status
+                FROM daily_summary
+                WHERE report_date = ?
+                """,
+                (report_date,),
+            ).fetchone()
+            if not summary:
+                return None
+            statuses = [
+                row["status"]
+                for row in conn.execute(
+                    "SELECT status FROM validation_log WHERE report_date = ?",
+                    (report_date,),
+                ).fetchall()
+            ]
+        fail_count = sum(1 for status in statuses if status == "FAIL")
+        warning_count = sum(1 for status in statuses if status == "WARNING")
+        if fail_count:
+            severity = "FAIL"
+        elif warning_count:
+            severity = "WARNING"
+        else:
+            severity = "PASS"
+        remaining = summary["remaining_volume"] or 0
+        return {
+            "reportDate": report_date,
+            "communicationStatus": summary["communication_status"],
+            "communicationStatusLabel": "정상 소통" if remaining == 0 else "잔량 발생",
+            "validationSeverity": severity,
+            "validationFailCount": fail_count,
+            "validationWarningCount": warning_count,
+        }
+
     def list_reports(self) -> list[dict]:
         with self._connect() as conn:
             rows = conn.execute(
@@ -2538,6 +2585,11 @@ class SqliteRepository:
                 report_key: volume
                 for report_key, volume in volume_by_date.items()
                 if volume is not None
+            },
+            "nationalVolumeByDate": {
+                row["report_date"]: self._to_thousand(row["national_volume"])
+                for row in rows
+                if row["national_volume"] is not None
             },
         }
 

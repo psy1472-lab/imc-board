@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import sqlite3
+import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import Body, Depends, FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import Body, Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 
 from application.briefing_service import BriefingService
 from application.report_parser import ReportParser
@@ -25,13 +26,21 @@ from interfaces.api.admin_auth import (
     issue_admin_token,
     require_admin,
 )
+from interfaces.api.http_cache import (
+    REPORT_CACHE_CONTROL,
+    build_report_etag,
+    if_none_match_matches,
+)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    try:
-        briefing_service.volume_forecast_service.warm_model_cache()
-    except Exception:
-        pass
+    def _warm_model_cache() -> None:
+        try:
+            briefing_service.volume_forecast_service.warm_model_cache()
+        except Exception:
+            pass
+
+    threading.Thread(target=_warm_model_cache, name="warm-ml-cache", daemon=True).start()
     yield
 
 
@@ -136,13 +145,15 @@ async def upload_report(
 @app.get("/api/reports/dates")
 def list_dates():
     metadata = repository.list_report_date_metadata()
+    dates = [item["reportDate"] for item in metadata]
     response = JSONResponse(
         {
-            "dates": [item["reportDate"] for item in metadata],
+            "dates": dates,
+            "latestDate": dates[-1] if dates else None,
             "metadata": metadata,
         }
     )
-    response.headers["Cache-Control"] = "public, max-age=300"
+    response.headers["Cache-Control"] = REPORT_CACHE_CONTROL
     return response
 
 
@@ -278,6 +289,16 @@ def safety_analysis(date: str = Query(..., description="YYYY-MM-DD")):
     return payload
 
 
+@app.get("/api/dashboard/header")
+def dashboard_header(date: str = Query(..., description="YYYY-MM-DD")):
+    payload = repository.get_dashboard_header(date)
+    if not payload:
+        raise HTTPException(status_code=404, detail="report not found")
+    response = JSONResponse(payload)
+    response.headers["Cache-Control"] = REPORT_CACHE_CONTROL
+    return response
+
+
 @app.get("/api/dashboard/briefing")
 def daily_briefing(
     date: str = Query(..., description="YYYY-MM-DD"),
@@ -290,19 +311,27 @@ def daily_briefing(
     if not payload:
         raise HTTPException(status_code=404, detail="report not found")
     response = JSONResponse(payload)
-    if sections == "core":
-        response.headers["Cache-Control"] = "public, max-age=60"
-    elif sections == "forecast":
-        response.headers["Cache-Control"] = "public, max-age=300"
+    response.headers["Cache-Control"] = REPORT_CACHE_CONTROL
     return response
 
 
 @app.get("/api/dashboard/summary")
 def dashboard_summary(
+    request: Request,
     date: str = Query(..., description="YYYY-MM-DD"),
     compare: str = Query("prev_day"),
 ):
+    ingested_at = repository.get_report_ingested_at(date)
+    etag = build_report_etag(date, compare, ingested_at)
+    if if_none_match_matches(request.headers.get("if-none-match"), etag):
+        return Response(
+            status_code=304,
+            headers={"ETag": etag, "Cache-Control": REPORT_CACHE_CONTROL},
+        )
     payload = repository.get_dashboard_summary(date, compare)
     if not payload:
         raise HTTPException(status_code=404, detail="report not found")
-    return payload
+    response = JSONResponse(payload)
+    response.headers["Cache-Control"] = REPORT_CACHE_CONTROL
+    response.headers["ETag"] = etag
+    return response

@@ -14,6 +14,7 @@ import {
 } from "../components/panels/DashboardPanels";
 import { useDashboardFilters } from "../context/DashboardFilterContext";
 import { useTheme } from "../context/ThemeContext";
+import { useRequestGeneration } from "../hooks/useRequestGeneration";
 import type { DashboardSummary } from "../types/dashboard";
 
 const KPI_ORDER = [
@@ -42,20 +43,41 @@ function orderKpis(kpis: DashboardSummary["kpis"]) {
 export default function SummaryDashboard() {
   const { palette } = useTheme();
   const { selectedDate, compare, loadDashboardSummary, getCachedDashboardSummary } = useDashboardFilters();
+  const { next, isCurrent, invalidate } = useRequestGeneration();
   const [data, setData] = useState<DashboardSummary | null>(() =>
     selectedDate ? getCachedDashboardSummary(selectedDate, compare) : null,
   );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const loadData = () => {
-    if (!selectedDate) return;
-    setLoading(true);
-    setError(null);
-    loadDashboardSummary(selectedDate, compare)
-      .then(setData)
-      .catch(() => setError("대시보드 데이터를 불러오지 못했습니다."))
-      .finally(() => setLoading(false));
+  const loadData = (date = selectedDate, compareBasis = compare) => {
+    if (!date) return;
+    const requestId = next();
+    const cached = getCachedDashboardSummary(date, compareBasis);
+    if (cached && cached.meta.reportDate === date) {
+      setData(cached);
+      setLoading(false);
+      setError(null);
+    } else {
+      setData(null);
+      setLoading(true);
+      setError(null);
+    }
+    loadDashboardSummary(date, compareBasis)
+      .then((summary) => {
+        if (!isCurrent(requestId)) return;
+        setData(summary);
+      })
+      .catch(() => {
+        if (!isCurrent(requestId)) return;
+        if (!cached) {
+          setError("대시보드 데이터를 불러오지 못했습니다.");
+        }
+      })
+      .finally(() => {
+        if (!isCurrent(requestId)) return;
+        setLoading(false);
+      });
   };
 
   useEffect(() => {
@@ -63,12 +85,8 @@ export default function SummaryDashboard() {
       setData(null);
       return;
     }
-    const cached = getCachedDashboardSummary(selectedDate, compare);
-    if (cached) {
-      setData(cached);
-      return;
-    }
-    loadData();
+    loadData(selectedDate, compare);
+    return () => invalidate();
   }, [selectedDate, compare]);
 
   if (!selectedDate) {

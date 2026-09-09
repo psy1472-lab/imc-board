@@ -10,6 +10,7 @@ import {
 } from "../lib/dashboardCompare";
 import { useDashboardFilters } from "../context/DashboardFilterContext";
 import { useTheme } from "../context/ThemeContext";
+import { useRequestGeneration } from "../hooks/useRequestGeneration";
 import { formatDateWithWeekday } from "../lib/dateFormat";
 import { fetchVolumeAnalysis } from "../lib/api";
 import { formatDayType, isCompactReport } from "../lib/reportFormat";
@@ -140,20 +141,32 @@ function buildBenchmarkRows(
 export default function VolumeAnalysisPage() {
   const { palette, mode } = useTheme();
   const { selectedDate, compare, setCompareBasis, trendView, setVolumeTrendView } = useDashboardFilters();
+  const { next, isCurrent, invalidate } = useRequestGeneration();
   const [data, setData] = useState<VolumeAnalysis | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [yearToDateView, setYearToDateView] = useState<YearToDateViewMode>("cumulative");
   const activeBenchmarkKey = compareToBenchmarkKey(compare);
 
-  const loadData = () => {
-    if (!selectedDate) return;
+  const loadData = (date = selectedDate) => {
+    if (!date) return;
+    const requestId = next();
+    setData(null);
     setLoading(true);
     setError(null);
-    fetchVolumeAnalysis(selectedDate)
-      .then(setData)
-      .catch(() => setError("물량 분석 데이터를 불러오지 못했습니다."))
-      .finally(() => setLoading(false));
+    fetchVolumeAnalysis(date)
+      .then((payload) => {
+        if (!isCurrent(requestId)) return;
+        setData(payload);
+      })
+      .catch(() => {
+        if (!isCurrent(requestId)) return;
+        setError("물량 분석 데이터를 불러오지 못했습니다.");
+      })
+      .finally(() => {
+        if (!isCurrent(requestId)) return;
+        setLoading(false);
+      });
   };
 
   useEffect(() => {
@@ -161,7 +174,8 @@ export default function VolumeAnalysisPage() {
       setData(null);
       return;
     }
-    loadData();
+    loadData(selectedDate);
+    return () => invalidate();
   }, [selectedDate]);
 
   const trendData = useMemo(() => {

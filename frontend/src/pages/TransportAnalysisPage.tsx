@@ -7,6 +7,7 @@ import { buildTransportTrendChartData } from "../lib/transportTrendChartData";
 import { compareToBenchmarkKey, TREND_OPTIONS } from "../lib/dashboardCompare";
 import { useDashboardFilters } from "../context/DashboardFilterContext";
 import { useTheme } from "../context/ThemeContext";
+import { useRequestGeneration } from "../hooks/useRequestGeneration";
 import { fetchTransportAnalysis } from "../lib/api";
 import { formatNumber } from "../styles/theme";
 import type { TransportAnalysis, TransportBenchmark } from "../types/transportAnalysis";
@@ -49,19 +50,31 @@ function buildBenchmarkRows(summary: TransportAnalysis["summary"], benchmark?: T
 export default function TransportAnalysisPage() {
   const { palette } = useTheme();
   const { selectedDate, compare, setCompareBasis, trendView, setVolumeTrendView } = useDashboardFilters();
+  const { next, isCurrent, invalidate } = useRequestGeneration();
   const [data, setData] = useState<TransportAnalysis | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const activeBenchmarkKey = compareToBenchmarkKey(compare);
 
-  const loadData = () => {
-    if (!selectedDate) return;
+  const loadData = (date = selectedDate) => {
+    if (!date) return;
+    const requestId = next();
+    setData(null);
     setLoading(true);
     setError(null);
-    fetchTransportAnalysis(selectedDate)
-      .then(setData)
-      .catch(() => setError("운송 관제 데이터를 불러오지 못했습니다."))
-      .finally(() => setLoading(false));
+    fetchTransportAnalysis(date)
+      .then((payload) => {
+        if (!isCurrent(requestId)) return;
+        setData(payload);
+      })
+      .catch(() => {
+        if (!isCurrent(requestId)) return;
+        setError("운송 관제 데이터를 불러오지 못했습니다.");
+      })
+      .finally(() => {
+        if (!isCurrent(requestId)) return;
+        setLoading(false);
+      });
   };
 
   useEffect(() => {
@@ -69,7 +82,8 @@ export default function TransportAnalysisPage() {
       setData(null);
       return;
     }
-    loadData();
+    loadData(selectedDate);
+    return () => invalidate();
   }, [selectedDate]);
 
   const trendData = useMemo(() => {

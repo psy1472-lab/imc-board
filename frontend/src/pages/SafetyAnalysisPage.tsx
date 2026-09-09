@@ -8,6 +8,7 @@ import { buildSafetyTrendChartData } from "../lib/safetyTrendChartData";
 import { compareToBenchmarkKey, TREND_OPTIONS } from "../lib/dashboardCompare";
 import { useDashboardFilters } from "../context/DashboardFilterContext";
 import { useTheme } from "../context/ThemeContext";
+import { useRequestGeneration } from "../hooks/useRequestGeneration";
 import { fetchSafetyAnalysis } from "../lib/api";
 import { severityColor } from "../styles/theme";
 import type { SafetyAnalysis, SafetyBenchmark } from "../types/safetyAnalysis";
@@ -50,6 +51,7 @@ function buildBenchmarkRows(summary: SafetyAnalysis["summary"], benchmark?: Safe
 export default function SafetyAnalysisPage() {
   const { palette } = useTheme();
   const { selectedDate, compare, setCompareBasis, trendView, setVolumeTrendView } = useDashboardFilters();
+  const { next, isCurrent, invalidate } = useRequestGeneration();
   const [data, setData] = useState<SafetyAnalysis | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,14 +59,25 @@ export default function SafetyAnalysisPage() {
   const [criticalAnomalyModalOpen, setCriticalAnomalyModalOpen] = useState(false);
   const activeBenchmarkKey = compareToBenchmarkKey(compare);
 
-  const loadData = () => {
-    if (!selectedDate) return;
+  const loadData = (date = selectedDate) => {
+    if (!date) return;
+    const requestId = next();
+    setData(null);
     setLoading(true);
     setError(null);
-    fetchSafetyAnalysis(selectedDate)
-      .then(setData)
-      .catch(() => setError("안전·이상징후 데이터를 불러오지 못했습니다."))
-      .finally(() => setLoading(false));
+    fetchSafetyAnalysis(date)
+      .then((payload) => {
+        if (!isCurrent(requestId)) return;
+        setData(payload);
+      })
+      .catch(() => {
+        if (!isCurrent(requestId)) return;
+        setError("안전·이상징후 데이터를 불러오지 못했습니다.");
+      })
+      .finally(() => {
+        if (!isCurrent(requestId)) return;
+        setLoading(false);
+      });
   };
 
   useEffect(() => {
@@ -72,7 +85,8 @@ export default function SafetyAnalysisPage() {
       setData(null);
       return;
     }
-    loadData();
+    loadData(selectedDate);
+    return () => invalidate();
   }, [selectedDate]);
 
   const trendData = useMemo(() => {

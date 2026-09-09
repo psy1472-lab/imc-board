@@ -53,22 +53,51 @@ async function readApiError(res: Response, fallback: string): Promise<string> {
   return fallback;
 }
 
-export async function fetchReportDates(): Promise<string[]> {
+export type ReportDateList = {
+  dates: string[];
+  latestDate: string | null;
+  metadata: ReportDateMeta[];
+};
+
+export type DashboardHeader = {
+  reportDate: string;
+  communicationStatus: string;
+  communicationStatusLabel: string;
+  validationSeverity: "PASS" | "WARNING" | "FAIL";
+  validationFailCount: number;
+  validationWarningCount: number;
+};
+
+export async function fetchReportDateList(): Promise<ReportDateList> {
   const res = await apiFetch("/api/reports/dates");
   if (!res.ok) {
     throw new Error(await readApiError(res, "보고서 날짜를 불러오지 못했습니다."));
   }
   const data = await res.json();
-  return data.dates ?? [];
+  const dates: string[] = data.dates ?? [];
+  return {
+    dates,
+    latestDate: data.latestDate ?? dates[dates.length - 1] ?? null,
+    metadata: data.metadata ?? [],
+  };
+}
+
+export async function fetchReportDates(): Promise<string[]> {
+  const data = await fetchReportDateList();
+  return data.dates;
 }
 
 export async function fetchReportDateMetadata(): Promise<ReportDateMeta[]> {
-  const res = await apiFetch("/api/reports/dates");
+  const data = await fetchReportDateList();
+  return data.metadata;
+}
+
+export async function fetchDashboardHeader(date: string): Promise<DashboardHeader> {
+  const res = await apiFetch(`/api/dashboard/header?date=${date}`);
   if (!res.ok) {
-    throw new Error(await readApiError(res, "보고서 날짜를 불러오지 못했습니다."));
+    throw new Error(await readApiError(res, "헤더 상태를 불러오지 못했습니다."));
   }
-  const data = await res.json();
-  return data.metadata ?? [];
+  return res.json();
 }
 
 export async function fetchDashboardSummary(

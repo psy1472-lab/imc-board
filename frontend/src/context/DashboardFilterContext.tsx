@@ -1,5 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { fetchReportDates, fetchDashboardSummary } from "../lib/api";
+import { fetchReportDateList, fetchDashboardSummary } from "../lib/api";
+import {
+  readCachedSummary,
+  readSelectedDate,
+  writeCachedSummary,
+  writeSelectedDate,
+} from "../lib/sessionCache";
 import {
   compareToTrendView,
   trendViewToCompare,
@@ -30,18 +36,31 @@ function summaryCacheKey(date: string, compareBasis: CompareBasis) {
 
 export function DashboardFilterProvider({ children }: { children: ReactNode }) {
   const [dates, setDates] = useState<string[]>([]);
-  const [selectedDate, setSelectedDate] = useState("");
+  const [selectedDate, setSelectedDateState] = useState(readSelectedDate);
   const [compare, setCompare] = useState<CompareBasis>("prev_day");
   const [trendView, setTrendView] = useState<VolumeTrendView>("30d");
   const [error, setError] = useState<string | null>(null);
   const summaryCacheRef = useRef<Map<string, DashboardSummary>>(new Map());
   const inflightSummaryRef = useRef<Map<string, Promise<DashboardSummary>>>(new Map());
 
+  const setSelectedDate = useCallback((date: string) => {
+    setSelectedDateState(date);
+    writeSelectedDate(date);
+  }, []);
+
   useEffect(() => {
-    fetchReportDates()
-      .then((items) => {
-        setDates(items);
-        setSelectedDate(items[items.length - 1] ?? "");
+    fetchReportDateList()
+      .then((payload) => {
+        setDates(payload.dates);
+        setSelectedDateState((current) => {
+          if (current && payload.dates.includes(current)) {
+            writeSelectedDate(current);
+            return current;
+          }
+          const next = payload.latestDate ?? "";
+          writeSelectedDate(next);
+          return next;
+        });
       })
       .catch(() => setError("보고서 날짜를 불러오지 못했습니다."));
   }, []);
@@ -60,25 +79,27 @@ export function DashboardFilterProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refreshDates = useCallback(async () => {
-    const items = await fetchReportDates();
-    setDates(items);
-    setSelectedDate((current) => {
-      if (current && items.includes(current)) return current;
-      return items[items.length - 1] ?? "";
+    const payload = await fetchReportDateList();
+    setDates(payload.dates);
+    setSelectedDateState((current) => {
+      if (current && payload.dates.includes(current)) {
+        writeSelectedDate(current);
+        return current;
+      }
+      const next = payload.latestDate ?? "";
+      writeSelectedDate(next);
+      return next;
     });
   }, []);
 
   const getCachedDashboardSummary = useCallback((date: string, compareBasis: CompareBasis = "prev_day") => {
-    return summaryCacheRef.current.get(summaryCacheKey(date, compareBasis)) ?? null;
+    const key = summaryCacheKey(date, compareBasis);
+    return summaryCacheRef.current.get(key) ?? readCachedSummary<DashboardSummary>(date, compareBasis);
   }, []);
 
   const loadDashboardSummary = useCallback(
     async (date: string, compareBasis: CompareBasis = "prev_day") => {
       const key = summaryCacheKey(date, compareBasis);
-      const cached = summaryCacheRef.current.get(key);
-      if (cached) {
-        return cached;
-      }
       const inflight = inflightSummaryRef.current.get(key);
       if (inflight) {
         return inflight;
@@ -86,6 +107,7 @@ export function DashboardFilterProvider({ children }: { children: ReactNode }) {
       const request = fetchDashboardSummary(date, compareBasis)
         .then((summary) => {
           summaryCacheRef.current.set(key, summary);
+          writeCachedSummary(date, compareBasis, summary);
           inflightSummaryRef.current.delete(key);
           return summary;
         })
@@ -116,6 +138,7 @@ export function DashboardFilterProvider({ children }: { children: ReactNode }) {
     [
       dates,
       selectedDate,
+      setSelectedDate,
       compare,
       setCompareBasis,
       trendView,

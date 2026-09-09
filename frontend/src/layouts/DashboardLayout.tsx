@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useRequestGeneration } from "../hooks/useRequestGeneration";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { ValidationStatusBadge } from "../components/header/ValidationStatusBadge";
 import { CommunicationStatusBadge } from "../components/header/CommunicationStatusBadge";
@@ -9,11 +10,10 @@ import { NAV_ITEMS } from "../config/navigation";
 import { useAdminAuth } from "../context/AdminAuthContext";
 import { useDashboardFilters } from "../context/DashboardFilterContext";
 import { useTheme } from "../context/ThemeContext";
-import { fetchOperationPeriods, fetchReportValidation } from "../lib/api";
+import { fetchDashboardHeader, fetchOperationPeriods } from "../lib/api";
 import { COMPARE_OPTIONS } from "../lib/dashboardCompare";
 import { formatDateWithWeekday } from "../lib/dateFormat";
 import { getActiveOperationPeriods } from "../lib/operationPeriodMatch";
-import { getValidationSeverity, summarizeValidationLogs } from "../lib/validationFormat";
 import type { OperationPeriod } from "../types/operationPeriod";
 
 export function DashboardLayout() {
@@ -21,8 +21,8 @@ export function DashboardLayout() {
   const location = useLocation();
   const { palette } = useTheme();
   const { isAdmin, logout } = useAdminAuth();
-  const { dates, selectedDate, setSelectedDate, compare, setCompareBasis, error, loadDashboardSummary } =
-    useDashboardFilters();
+  const { dates, selectedDate, setSelectedDate, compare, setCompareBasis, error } = useDashboardFilters();
+  const headerRequests = useRequestGeneration();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [validationStatus, setValidationStatus] = useState<{
     severity: "PASS" | "WARNING" | "FAIL";
@@ -43,7 +43,7 @@ export function DashboardLayout() {
     fetchOperationPeriods()
       .then(setOperationPeriods)
       .catch(() => setOperationPeriods([]));
-  }, [location.pathname]);
+  }, []);
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "instant" in window ? ("instant" as ScrollBehavior) : "auto" });
@@ -52,37 +52,38 @@ export function DashboardLayout() {
   useEffect(() => {
     if (!selectedDate) {
       setCommunicationStatus(null);
-      return;
-    }
-    loadDashboardSummary(selectedDate, "prev_day")
-      .then((summary) =>
-        setCommunicationStatus({
-          label: summary.meta.communicationStatusLabel,
-          status: summary.meta.communicationStatus,
-        }),
-      )
-      .catch(() => setCommunicationStatus(null));
-  }, [selectedDate, loadDashboardSummary]);
-
-  useEffect(() => {
-    if (!selectedDate) {
       setValidationStatus(null);
       return;
     }
-    fetchReportValidation(selectedDate)
-      .then((logs) => {
-        const severity = getValidationSeverity(logs);
-        if (severity === "PASS") {
-          setValidationStatus({ severity, label: "데이터 검증 정상" });
+    const requestId = headerRequests.next();
+    setCommunicationStatus(null);
+    setValidationStatus(null);
+    fetchDashboardHeader(selectedDate)
+      .then((header) => {
+        if (!headerRequests.isCurrent(requestId)) return;
+        setCommunicationStatus({
+          label: header.communicationStatusLabel,
+          status: header.communicationStatus,
+        });
+        if (header.validationSeverity === "PASS") {
+          setValidationStatus({ severity: "PASS", label: "데이터 검증 정상" });
           return;
         }
-        const issues = summarizeValidationLogs(logs);
+        const issueCount = header.validationFailCount + header.validationWarningCount;
         setValidationStatus({
-          severity,
-          label: severity === "FAIL" ? `데이터 검증 실패 ${issues.length}건` : `데이터 검증 주의 ${issues.length}건`,
+          severity: header.validationSeverity,
+          label:
+            header.validationSeverity === "FAIL"
+              ? `데이터 검증 실패 ${issueCount}건`
+              : `데이터 검증 주의 ${issueCount}건`,
         });
       })
-      .catch(() => setValidationStatus(null));
+      .catch(() => {
+        if (!headerRequests.isCurrent(requestId)) return;
+        setCommunicationStatus(null);
+        setValidationStatus(null);
+      });
+    return () => headerRequests.invalidate();
   }, [selectedDate]);
 
   const sidebarClass = sidebarCollapsed ? "imc-sidebar imc-sidebar--collapsed" : "imc-sidebar";

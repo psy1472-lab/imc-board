@@ -8,6 +8,7 @@ import { compareToBenchmarkKey, TREND_OPTIONS } from "../lib/dashboardCompare";
 import { formatThousandUnit } from "../lib/numberFormat";
 import { useDashboardFilters } from "../context/DashboardFilterContext";
 import { useTheme } from "../context/ThemeContext";
+import { useRequestGeneration } from "../hooks/useRequestGeneration";
 import { fetchStaffingAnalysis } from "../lib/api";
 import type { StaffingAnalysis, StaffingBenchmark } from "../types/staffingAnalysis";
 
@@ -49,19 +50,31 @@ function buildBenchmarkRows(summary: StaffingAnalysis["summary"], benchmark?: St
 export default function StaffingAnalysisPage() {
   const { palette } = useTheme();
   const { selectedDate, compare, setCompareBasis, trendView, setVolumeTrendView } = useDashboardFilters();
+  const { next, isCurrent, invalidate } = useRequestGeneration();
   const [data, setData] = useState<StaffingAnalysis | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const activeBenchmarkKey = compareToBenchmarkKey(compare);
 
-  const loadData = () => {
-    if (!selectedDate) return;
+  const loadData = (date = selectedDate) => {
+    if (!date) return;
+    const requestId = next();
+    setData(null);
     setLoading(true);
     setError(null);
-    fetchStaffingAnalysis(selectedDate)
-      .then(setData)
-      .catch(() => setError("인력·생산성 데이터를 불러오지 못했습니다."))
-      .finally(() => setLoading(false));
+    fetchStaffingAnalysis(date)
+      .then((payload) => {
+        if (!isCurrent(requestId)) return;
+        setData(payload);
+      })
+      .catch(() => {
+        if (!isCurrent(requestId)) return;
+        setError("인력·생산성 데이터를 불러오지 못했습니다.");
+      })
+      .finally(() => {
+        if (!isCurrent(requestId)) return;
+        setLoading(false);
+      });
   };
 
   useEffect(() => {
@@ -69,7 +82,8 @@ export default function StaffingAnalysisPage() {
       setData(null);
       return;
     }
-    loadData();
+    loadData(selectedDate);
+    return () => invalidate();
   }, [selectedDate]);
 
   const trendData = useMemo(() => {

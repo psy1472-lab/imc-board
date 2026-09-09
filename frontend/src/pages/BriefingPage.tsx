@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { PageState } from "../components/PageState";
 import { useDashboardFilters } from "../context/DashboardFilterContext";
+import { useRequestGeneration } from "../hooks/useRequestGeneration";
 import { useTheme } from "../context/ThemeContext";
 import { fetchDailyBriefing } from "../lib/api";
+import { readCachedBriefing, writeCachedBriefing } from "../lib/sessionCache";
 import { formatDateWithWeekday } from "../lib/dateFormat";
 import { panelStyle } from "../styles/panel";
 import { severityColor } from "../styles/theme";
@@ -147,37 +149,59 @@ function SectionCard({ section }: { section: BriefingSection }) {
 export default function BriefingPage() {
   const { palette, mode } = useTheme();
   const { selectedDate } = useDashboardFilters();
+  const { next, isCurrent, invalidate } = useRequestGeneration();
   const [data, setData] = useState<DailyBriefing | null>(null);
   const [loading, setLoading] = useState(false);
   const [forecastLoading, setForecastLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const loadData = () => {
-    if (!selectedDate) return;
-    setLoading(true);
+  const loadData = (date = selectedDate) => {
+    if (!date) return;
+    const requestId = next();
+    const cached = readCachedBriefing<DailyBriefing>(date);
+    if (cached) {
+      setData(cached);
+      setLoading(false);
+      setError(null);
+    } else {
+      setData(null);
+      setLoading(true);
+      setError(null);
+    }
     setForecastLoading(true);
-    setError(null);
-    fetchDailyBriefing(selectedDate, "prev_day", "core")
+    fetchDailyBriefing(date, "prev_day", "core")
       .then((core) => {
-        setData({
+        if (!isCurrent(requestId)) return null;
+        const nextData = {
           ...core,
           tomorrowOutlook: core.tomorrowOutlook ?? { title: "내일 전망", items: [] },
-        });
+        };
+        writeCachedBriefing(date, nextData);
+        setData(nextData);
         setLoading(false);
-        return fetchDailyBriefing(selectedDate, "prev_day", "forecast");
+        return fetchDailyBriefing(date, "prev_day", "forecast");
       })
       .then((forecast) => {
-        setData((current) =>
-          current
+        if (!forecast || !isCurrent(requestId)) return;
+        setData((current) => {
+          const merged = current
             ? {
                 ...current,
                 tomorrowOutlook: forecast.tomorrowOutlook ?? { title: "내일 전망", items: [] },
               }
-            : forecast as DailyBriefing,
-        );
+            : (forecast as DailyBriefing);
+          writeCachedBriefing(date, merged);
+          return merged;
+        });
       })
-      .catch(() => setError("AI 운영 브리핑을 불러오지 못했습니다."))
+      .catch(() => {
+        if (!isCurrent(requestId)) return;
+        if (!cached) {
+          setError("AI 운영 브리핑을 불러오지 못했습니다.");
+        }
+      })
       .finally(() => {
+        if (!isCurrent(requestId)) return;
         setLoading(false);
         setForecastLoading(false);
       });
@@ -188,7 +212,8 @@ export default function BriefingPage() {
       setData(null);
       return;
     }
-    loadData();
+    loadData(selectedDate);
+    return () => invalidate();
   }, [selectedDate]);
 
   const panel = panelStyle(palette);
