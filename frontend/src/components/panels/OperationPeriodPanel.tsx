@@ -239,7 +239,7 @@ export function OperationPeriodPanel() {
       <div style={{ marginBottom: 16 }}>
         <h3 style={{ margin: "0 0 6px", fontSize: 18 }}>운영 특이 일정</h3>
         <p style={{ margin: 0, color: palette.muted, fontSize: 13, lineHeight: 1.6 }}>
-          우체국쇼핑할인, 특별소통기간, 위탁배달원 하계 휴식기간 등 물량·소통 분석 시 참고할 일정을 등록합니다.
+          우체국쇼핑대전, 특별소통기간, 위탁배달원 하계 휴식기간 등 물량·소통 분석 시 참고할 일정을 등록합니다.
         </p>
       </div>
 

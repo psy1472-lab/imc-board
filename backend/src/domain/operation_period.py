@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 OPERATION_PERIOD_LABELS: dict[str, str] = {
-    "post_shopping_discount": "우체국쇼핑할인",
+    "post_shopping_discount": "우체국쇼핑대전",
     "special_communication": "특별소통기간",
     "no_parcel_day": "위탁배달원 하계 휴식기간",
 }
@@ -179,15 +179,25 @@ def apply_operation_period_volume_adjustment(
     historical_no_parcel_avg: float | None = None,
     volume_by_date: dict[str, float] | None = None,
     before_date: date | None = None,
+    include_no_parcel: bool = True,
 ) -> tuple[float, tuple[str, ...]]:
     active = get_operation_periods_for_date(target_day, periods)
-    labels = tuple(operation_period_labels(active))
+    labeled = (
+        [period for period in active if period["periodType"] != "no_parcel_day"]
+        if not include_no_parcel
+        else active
+    )
+    labels = tuple(operation_period_labels(labeled))
     if not active:
         return volume, labels
 
     adjusted = volume
     cutoff = before_date or target_day
-    no_parcel_periods = [period for period in active if period["periodType"] == "no_parcel_day"]
+    no_parcel_periods = [
+        period
+        for period in active
+        if include_no_parcel and period["periodType"] == "no_parcel_day"
+    ]
 
     if no_parcel_periods:
         period = no_parcel_periods[0]
