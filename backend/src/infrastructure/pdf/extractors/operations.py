@@ -16,7 +16,7 @@ class QuotaExchangeExtractor:
     )
 
     def extract(self, document: PdfDocument, report_date: date) -> QuotaExchange:
-        text = document.pages[1].text if len(document.pages) > 1 else ""
+        text = "\n".join(page.text for page in document.pages[:3])
         quarter_standard, quarter_actual, quarter_difference = self._parse_quota_row(text, "쿼터")
         exchange_standard, exchange_actual, exchange_difference = self._parse_quota_row(text, "교환")
         remaining_match = re.search(r"교환\s*잔량:\s*([^(\s]+)", text)
@@ -41,7 +41,7 @@ class QuotaExchangeExtractor:
         section = section_match.group(1) if section_match else ""
         if not section:
             return None, None, None
-        match = re.search(rf"(?:^|\n){label}\s+([-\d]+(?:\s+[-\d]+)*)", section)
+        match = re.search(rf"(?:^|\n|[-\s]){label}\s+([-\d]+(?:\s+[-\d]+)*)", section)
         if not match:
             return None, None, None
 
@@ -65,6 +65,14 @@ class QuotaExchangeExtractor:
                     if actual - standard == difference:
                         return standard, actual, difference
 
+        if len(parts) >= 4:
+            standard = to_int_or_zero(parts[0])
+            mid = to_int_or_zero(parts[1])
+            actual = to_int_or_zero(parts[2])
+            difference = to_int_or_zero(parts[3])
+            if actual - standard == difference or actual - standard - mid == difference:
+                return standard, actual, difference
+
         return None, None, None
 
 
@@ -81,10 +89,28 @@ class TransportExtractor:
     OFFICE_PATTERN = re.compile(r"([가-힣]+(?:집|물류|해상|인바운드)|[가-힣]+물)(?=\s)")
 
     def extract(self, document: PdfDocument, report_date: date) -> list[TransportOffice]:
-        if len(document.pages) < 3:
+        texts = self._transport_page_texts(document)
+        if not texts:
             return []
 
-        text = document.pages[2].text
+        offices: list[TransportOffice] = []
+        for text in texts:
+            offices.extend(self._extract_offices_from_text(text, report_date))
+        return offices
+
+    def _transport_page_texts(self, document: PdfDocument) -> list[str]:
+        matched: list[str] = []
+        for page in document.pages:
+            compact = page.text.replace(" ", "")
+            if "집중국별쿼터발송" in compact or "집중국별쿼터" in compact:
+                matched.append(page.text)
+        if matched:
+            return matched
+        if len(document.pages) >= 3:
+            return [document.pages[2].text]
+        return []
+
+    def _extract_offices_from_text(self, text: str, report_date: date) -> list[TransportOffice]:
         lines = [line.strip() for line in text.splitlines() if line.strip()]
         offices: list[TransportOffice] = []
 

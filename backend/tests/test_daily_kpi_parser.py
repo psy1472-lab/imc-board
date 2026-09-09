@@ -222,6 +222,67 @@ def test_parse_volume_total_typo_as_man_when_peers_use_man():
     assert normalized == 291000
 
 
+def test_parse_quota_row_inline_label_and_four_numeric_exchange():
+    from infrastructure.pdf.extractors.operations import QuotaExchangeExtractor
+
+    text = (
+        "교환 및 수지 쿼 터 준 수 현 황\n"
+        "- 쿼터 90 2 93 1 1 1 95\n"
+        "교환 125 1 120 -6\n"
+        "소통실적 : 37.6만개 *교환 잔량: 없음\n"
+        "배분 및 교환 마지막 운송편 발송 현황\n"
+    )
+    extractor = QuotaExchangeExtractor()
+    standard, actual, difference = extractor._parse_quota_row(text, "쿼터")
+    assert standard == 90
+    assert actual == 95
+    assert difference == 1
+
+    exchange_standard, exchange_actual, exchange_difference = extractor._parse_quota_row(text, "교환")
+    assert exchange_standard == 125
+    assert exchange_actual == 120
+    assert exchange_difference == -6
+
+
+def test_extract_quota_from_first_page_and_transport_from_attachment():
+    from infrastructure.pdf.extractors.operations import QuotaExchangeExtractor, TransportExtractor
+
+    document = PdfDocument(
+        path="26.09.08.pdf",
+        pages=[
+            PdfPage(
+                index=0,
+                text=(
+                    "교환 및 수지 쿼 터 준 수 현 황\n"
+                    "- 쿼터 90 2 93 1 1 1 95\n"
+                    "교환 125 1 120 -6\n"
+                    "*교환 잔량: 없음\n"
+                    "배분 및 교환 마지막 운송편 발송 현황\n"
+                ),
+                tables=[],
+            ),
+            PdfPage(
+                index=1,
+                text="【붙임1】집중국별 쿼 터 발 송 현 황\n동서울집 7,852 4 4 4 0 23:53 68\n",
+                tables=[],
+            ),
+            PdfPage(index=2, text="소포구분기 가동현황\n", tables=[]),
+        ],
+    )
+    quota = QuotaExchangeExtractor().extract(document, date(2026, 9, 8))
+    assert quota.quarter_standard == 90
+    assert quota.quarter_actual == 95
+    assert quota.exchange_standard == 125
+    assert quota.exchange_actual == 120
+    assert quota.exchange_remaining == 0
+
+    offices = TransportExtractor().extract(document, date(2026, 9, 8))
+    assert len(offices) == 1
+    assert offices[0].office_name == "동서울집"
+    assert offices[0].vehicles_actual == 4
+    assert offices[0].vehicles_standard == 4
+
+
 def test_parse_quota_row_with_dash_cells():
     from infrastructure.pdf.extractors.operations import QuotaExchangeExtractor
 
