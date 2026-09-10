@@ -228,28 +228,39 @@ class SafetyCheckExtractor:
         "소방": ("fire_safety", "소방"),
     }
     INCIDENT_SECTION_RE = re.compile(
-        r"재해현황\s*(.+?)(?:※\s*불량|조치사항|\*\s*수시위험성평가|-\s*6\s*-)",
+        r"재해현황\s*(.+?)(?:\*\s*수시위험성평가|-\s*[56]\s*-|$)",
         re.DOTALL,
     )
     INCIDENT_PERSON_RE = re.compile(r"(?<![가-힣])([가-힣]{2,4})\(([남여])\)")
+    DEPARTMENT_RE = re.compile(r"(?:물류\d+과|\d+팀|[가-힣]{1,6}(?:과|팀))(?!상)")
+    INJURY_TYPE_RE = re.compile(r"(찰과상|타박상|염좌|열상|창상|골절|화상|자상|절단|좌상|출혈|끼임)")
+    DISPATCH_NOISE_RE = re.compile(
+        r"(?:[가-힣]\s*){1,4}집\s+[가-힣외,\d\s국]+[’']\d{2}\.\d{1,2}월[\d,.\s↑대]+"
+    )
+    FULLWIDTH_DIGITS = str.maketrans("０１２３４５６７８９：", "0123456789:")
+    ACTION_BOILERPLATE_RE = re.compile(r"\*\s*수시위험성평가.*")
 
     def extract(self, document: PdfDocument, report_date: date):
-        from domain.entities import SafetyCategory, SafetyIncident
+        from domain.entities import SafetyCategory
 
         if not document.pages:
             return [], []
 
-        page_text = self._find_safety_page_text(document)
+        page = self._find_safety_page(document)
+        page_text = page.text if page else document.pages[-1].text
+        tables = page.tables if page else []
         categories = self._extract_categories(page_text, report_date)
-        incidents = self._extract_incidents(page_text, report_date)
+        incidents = self._extract_incidents_from_tables(tables, report_date)
+        if incidents is None:
+            incidents = self._extract_incidents_from_text(page_text, report_date)
         return categories, incidents
 
-    def _find_safety_page_text(self, document: PdfDocument) -> str:
+    def _find_safety_page(self, document: PdfDocument):
         for page in reversed(document.pages):
-            text = page.text
-            if "붙임6" in text or "관리감독자" in text or "재해현황" in text:
-                return text
-        return document.pages[-1].text
+            compact = page.text.replace(" ", "")
+            if "붙임6" in compact or "관리감독자" in compact or "재해현황" in compact:
+                return page
+        return document.pages[-1]
 
     def _extract_categories(self, page_text: str, report_date: date):
         from domain.entities import SafetyCategory
@@ -269,14 +280,83 @@ class SafetyCheckExtractor:
                 )
         return categories
 
-    def _extract_incidents(self, page_text: str, report_date: date):
+    def _extract_incidents_from_tables(self, tables, report_date: date):
+        found_header = False
+        incidents = []
+        for table in tables or []:
+            parsed = self._parse_incident_table(table, report_date)
+            if parsed is not None:
+                found_header = True
+                incidents.extend(parsed)
+        if found_header:
+            return incidents
+        return None
+
+    def _parse_incident_table(self, table, report_date: date):
+        from domain.entities import SafetyIncident
+
+        header_index = None
+        columns = None
+        for index, row in enumerate(table):
+            cells = self._row_cells(row)
+            if self._is_incident_header(cells):
+                header_index = index
+                columns = self._incident_column_map(cells)
+                break
+        if header_index is None or columns is None:
+            return None
+
+        incidents: list[SafetyIncident] = []
+        last_department: str | None = None
+        for row in table[header_index + 1 :]:
+            cells = self._row_cells(row)
+            row_text = " ".join(cells)
+            person = self._first_person(row_text)
+            if person is None:
+                if incidents and "조치사항" in row_text.replace(" ", ""):
+                    action = self._extract_action(row_text)
+                    if action:
+                        current = incidents[-1].description or ""
+                        if action not in current:
+                            incidents[-1].description = f"{current} / 조치사항: {action}".strip(" /")
+                continue
+
+            name, gender = person
+            department = self._clean_department(self._cell_at(cells, columns.get("department"))) or last_department
+            if department:
+                last_department = department
+            occurrence_time = self._extract_time(
+                self._cell_at(cells, columns.get("time")) or row_text
+            )
+            injury_type = self._extract_injury_type(
+                self._cell_at(cells, columns.get("injury")) or row_text
+            )
+            description = self._clean_description(
+                self._cell_at(cells, columns.get("description")) or "",
+                name,
+                gender,
+            )
+            incidents.append(
+                SafetyIncident(
+                    report_date=report_date,
+                    department=department,
+                    victim_name=name,
+                    gender=gender,
+                    occurrence_time=occurrence_time,
+                    injury_type=injury_type,
+                    description=description,
+                )
+            )
+        return incidents
+
+    def _extract_incidents_from_text(self, page_text: str, report_date: date):
         from domain.entities import SafetyIncident
 
         section_match = self.INCIDENT_SECTION_RE.search(page_text)
         if not section_match:
             return []
 
-        section = section_match.group(1)
+        section = self.DISPATCH_NOISE_RE.sub(" ", section_match.group(1))
         anchors = list(self.INCIDENT_PERSON_RE.finditer(section))
         incidents: list[SafetyIncident] = []
 
@@ -285,57 +365,108 @@ class SafetyCheckExtractor:
             lookback_start = anchors[index - 1].end() if index > 0 else 0
             block_end = anchors[index + 1].start() if index + 1 < len(anchors) else len(section)
             line_start = max(0, match.start() - 40)
-            line = section[line_start : match.end() + 40]
-
-            prefix = section[lookback_start : match.start()]
-            prefix_lines = [line.strip() for line in prefix.splitlines() if line.strip()]
-            if prefix_lines and "부서명" in prefix_lines[0]:
-                prefix_lines = prefix_lines[1:]
-            narrative_prefix = prefix_lines[-1] if prefix_lines else ""
-            body = section[match.start():block_end]
-            if narrative_prefix and narrative_prefix not in body:
-                body = f"{narrative_prefix} {body}".strip()
-
+            line = section[line_start : match.end() + 80]
+            body = section[lookback_start:block_end]
             department = self._extract_department(line, name, gender)
-            time_match = re.search(r"\b(\d{2}:\d{2})\b", line) or re.search(
-                r"\b(\d{2}:\d{2})\b", section[match.end() : match.end() + 40]
-            )
-            description = self._extract_incident_description(body, name, gender)
-
+            description = self._clean_description(body, name, gender)
             incidents.append(
                 SafetyIncident(
                     report_date=report_date,
                     department=department,
                     victim_name=name,
                     gender=gender,
-                    occurrence_time=time_match.group(1) if time_match else None,
+                    occurrence_time=self._extract_time(line) or self._extract_time(body),
+                    injury_type=self._extract_injury_type(body),
                     description=description,
                 )
             )
         return incidents
 
+    def _is_incident_header(self, cells: list[str]) -> bool:
+        text = "".join(cells)
+        return "부서명" in text and "재해경위" in text and "성명" in text
+
+    def _incident_column_map(self, cells: list[str]) -> dict[str, int]:
+        compact = [re.sub(r"\s+", "", cell) for cell in cells]
+        mapping: dict[str, int] = {}
+        for index, cell in enumerate(compact):
+            if "department" not in mapping and "부서명" in cell:
+                mapping["department"] = index
+            elif "name" not in mapping and "성명" in cell:
+                mapping["name"] = index
+            elif "time" not in mapping and "발생시간" in cell:
+                mapping["time"] = index
+            elif "injury" not in mapping and "상해종류" in cell:
+                mapping["injury"] = index
+            elif "description" not in mapping and "재해경위" in cell:
+                mapping["description"] = index
+        return mapping
+
+    def _row_cells(self, row) -> list[str]:
+        return [re.sub(r"\s+", " ", (cell or "").replace("\n", " ")).strip() for cell in row]
+
+    def _cell_at(self, cells: list[str], index: int | None) -> str:
+        if index is None or index < 0 or index >= len(cells):
+            return ""
+        return cells[index]
+
+    def _first_person(self, text: str) -> tuple[str, str] | None:
+        match = self.INCIDENT_PERSON_RE.search(text)
+        if not match:
+            return None
+        return match.group(1), match.group(2)
+
     def _extract_department(self, block: str, name: str, gender: str) -> str | None:
         before_name = re.search(
-            rf"(?:^|\s)((?:\d+팀)|(?:[가-힣]{{1,6}}(?:과|팀)))\s+{re.escape(name)}\({gender}\)",
+            rf"(?:^|\s)({self.DEPARTMENT_RE.pattern})\s+{re.escape(name)}\({gender}\)",
             block,
         )
         if before_name:
-            return before_name.group(1)
-
+            return self._clean_department(before_name.group(1))
         after_name = re.search(
-            rf"{re.escape(name)}\({gender}\).{{0,40}}?((?:\d+팀)|(?:[가-힣]{{1,6}}(?:과|팀)))",
+            rf"{re.escape(name)}\({gender}\).{{0,40}}?({self.DEPARTMENT_RE.pattern})",
             block,
             re.DOTALL,
         )
         if after_name:
-            return after_name.group(1)
+            return self._clean_department(after_name.group(1))
         return None
 
-    def _extract_incident_description(self, block: str, name: str, gender: str) -> str:
-        text = block
+    def _clean_department(self, value: str | None) -> str | None:
+        text = (value or "").strip()
+        if not text or self.INJURY_TYPE_RE.fullmatch(text):
+            return None
+        match = self.DEPARTMENT_RE.search(text)
+        return match.group(0) if match else None
+
+    def _extract_time(self, text: str) -> str | None:
+        normalized = text.translate(self.FULLWIDTH_DIGITS)
+        match = re.search(r"\b(\d{1,2}:\d{2})\b", normalized)
+        if not match:
+            return None
+        hour, minute = match.group(1).split(":")
+        return f"{int(hour):02d}:{minute}"
+
+    def _extract_injury_type(self, text: str) -> str | None:
+        match = self.INJURY_TYPE_RE.search(text)
+        return match.group(1) if match else None
+
+    def _extract_action(self, text: str) -> str | None:
+        cleaned = self.ACTION_BOILERPLATE_RE.sub("", text)
+        match = re.search(r"조치사항\s*[:：]?\s*(.+)", cleaned)
+        if not match:
+            return None
+        action = re.sub(r"\s+", " ", match.group(1)).strip(" -")
+        return action or None
+
+    def _clean_description(self, block: str, name: str, gender: str) -> str:
+        text = self.DISPATCH_NOISE_RE.sub(" ", block)
+        text = self.ACTION_BOILERPLATE_RE.sub(" ", text)
         text = re.sub(r"부서명.*?재해경위", " ", text)
         text = re.sub(rf"{re.escape(name)}\({gender}\)", " ", text)
-        text = re.sub(r"(?<![가-힣])(?:\d+팀|[가-힣]{1,6}(?:과|팀))(?=\s)", " ", text)
+        text = re.sub(r"(?<![가-힣])(?:물류\d+과|\d+팀|[가-힣]{1,6}(?:과|팀))(?!상)(?=\s)", " ", text)
         text = re.sub(r"우정실무원|\(공무직\)|\(한시직\)|한시직|공무직", " ", text)
+        text = re.sub(r"[’']\d{2}\.\d{1,2}월", " ", text)
+        text = re.sub(r"\d{1,3}(?:,\d{3})+(?:\.\d+)?", " ", text)
         text = re.sub(r"\s+", " ", text).strip(" -")
         return text or "재해경위 정보 없음"

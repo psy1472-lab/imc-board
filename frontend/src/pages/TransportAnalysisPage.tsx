@@ -18,6 +18,20 @@ function formatMetric(value?: number | null, unit = "", decimals = 1) {
   return formatted;
 }
 
+function formatVehicleQuotaSub(
+  actual?: number | null,
+  standard?: number | null,
+  standardLabel = "쿼터기준",
+) {
+  const actualText = actual == null ? "-" : `${actual}대`;
+  const standardText = standard == null ? "-" : `${standard}대`;
+  return `차량수 ${actualText} / ${standardLabel} ${standardText}`;
+}
+
+function isOverQuota(actual?: number | null, standard?: number | null) {
+  return actual != null && standard != null && actual > standard;
+}
+
 function buildBenchmarkRows(summary: TransportAnalysis["summary"], benchmark?: TransportBenchmark): BenchmarkRow[] {
   return [
     {
@@ -120,17 +134,19 @@ export default function TransportAnalysisPage() {
     return <PageState empty />;
   }
 
+  const quarterOverQuota = isOverQuota(data.summary.quarterActual, data.summary.quarterStandard);
   const summaryCards = [
     {
       label: "쿼터 준수율",
       value: formatMetric(data.summary.quarterComplianceRate, "%"),
-      sub: `${data.summary.quarterActual ?? "-"} / ${data.summary.quarterStandard ?? "-"}대`,
-      accent: true,
+      sub: formatVehicleQuotaSub(data.summary.quarterActual, data.summary.quarterStandard, "쿼터기준"),
+      accent: !quarterOverQuota,
+      warning: quarterOverQuota,
     },
     {
       label: "교환 준수율",
       value: formatMetric(data.summary.exchangeComplianceRate, "%"),
-      sub: `${data.summary.exchangeActual ?? "-"} / ${data.summary.exchangeStandard ?? "-"}대`,
+      sub: formatVehicleQuotaSub(data.summary.exchangeActual, data.summary.exchangeStandard, "교환기준"),
     },
     {
       label: "교환 잔량",
@@ -172,7 +188,17 @@ export default function TransportAnalysisPage() {
           >
             <div style={{ color: palette.muted, fontSize: 13, marginBottom: 8 }}>{card.label}</div>
             <div style={{ fontSize: 24, fontWeight: 700, whiteSpace: "nowrap" }}>{card.value}</div>
-            {card.sub ? <div style={{ color: palette.muted, fontSize: 12, marginTop: 6 }}>{card.sub}</div> : null}
+            {card.sub ? (
+              <div
+                style={{
+                  color: "warning" in card && card.warning ? palette.warning : palette.muted,
+                  fontSize: 12,
+                  marginTop: 6,
+                }}
+              >
+                {card.sub}
+              </div>
+            ) : null}
           </div>
         ))}
       </section>

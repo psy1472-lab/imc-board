@@ -115,10 +115,23 @@ type TransportProps = {
 type TransportCardProps = {
   label: string;
   data: DashboardSummary["transport"]["quarter"];
+  standardLabel?: string;
+  remaining?: boolean;
 };
 
-function TransportCard({ label, data }: TransportCardProps) {
+function formatVehicleQuotaLine(
+  actual?: number | null,
+  standard?: number | null,
+  standardLabel = "쿼터기준",
+) {
+  const actualText = actual == null ? "-" : `${actual}대`;
+  const standardText = standard == null ? "-" : `${standard}대`;
+  return `차량수 ${actualText} / ${standardLabel} ${standardText}`;
+}
+
+function TransportCard({ label, data, standardLabel = "쿼터기준", remaining = false }: TransportCardProps) {
   const { palette } = useTheme();
+  const overQuota = !remaining && data.actual != null && data.standard != null && data.actual > data.standard;
 
   return (
     <div
@@ -130,12 +143,25 @@ function TransportCard({ label, data }: TransportCardProps) {
       }}
     >
       <div style={{ color: palette.muted, fontSize: 12, whiteSpace: "nowrap" }}>{label}</div>
-      <div style={{ fontSize: 20, fontWeight: 700, marginTop: 8, whiteSpace: "nowrap" }}>
-        {data.actual ?? "-"} / {data.standard ?? "-"}
+      <div style={{ fontSize: remaining ? 20 : 15, fontWeight: 700, marginTop: 8, lineHeight: 1.4 }}>
+        {remaining
+          ? data.actual === 0
+            ? "없음"
+            : (data.actual ?? "-")
+          : formatVehicleQuotaLine(data.actual, data.standard, standardLabel)}
       </div>
-      <div style={{ color: palette.normal, marginTop: 6, whiteSpace: "nowrap", fontSize: 12 }}>
-        준수율 {data.complianceRate ?? "-"}%
-      </div>
+      {remaining ? null : (
+        <div
+          style={{
+            color: overQuota ? palette.warning : palette.normal,
+            marginTop: 6,
+            fontSize: 12,
+          }}
+        >
+          준수율 {data.complianceRate ?? "-"}%
+          {overQuota ? " · 쿼터기준 초과" : ""}
+        </div>
+      )}
     </div>
   );
 }
@@ -146,10 +172,11 @@ export function TransportPanel({ transport, quotaOverages }: TransportProps) {
   return (
     <div style={{ display: "grid", gap: 16 }}>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 12, minWidth: 0 }}>
-        <TransportCard label="쿼터 운송" data={transport.quarter} />
-        <TransportCard label="교환 운송" data={transport.exchange} />
+        <TransportCard label="쿼터 운송" data={transport.quarter} standardLabel="쿼터기준" />
+        <TransportCard label="교환 운송" data={transport.exchange} standardLabel="교환기준" />
         <TransportCard
           label="교환 잔량"
+          remaining
           data={{
             actual: transport.exchangeRemaining,
             standard: 0,
