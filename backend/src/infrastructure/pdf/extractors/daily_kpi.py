@@ -424,25 +424,27 @@ class DailyKpiExtractor:
 
         return dispatch_aligned, arrival_aligned, total_aligned
 
+    _HOUR_NUMBER_RUN = r"((?:[\d.\-]+[ \t]+)+[\d.\-]+)"
+
     def _extract_staffing_hour_rows(self, table_section: str, text: str) -> tuple[list[str | None], list[str | None]]:
         staff_match = self._match_staffing_numbers(
             table_section,
             text,
             [
-                r"실제\s*근무\s*인력\([^)]*\)\s*\(\s*명\s*\)\s+((?:-?\d+(?:\.\d+)?\s+)+-?\d+(?:\.\d+)?)",
-                r"근무\s*인력\([^)]*⑦[^)]*\)[^\d\-]*((?:[\d.\-]+\s+)+[\d.\-]+)",
+                rf"실제\s*근무\s*인력\([^)]*\)\s*\(\s*명\s*\)[ \t]+{self._HOUR_NUMBER_RUN}",
+                rf"근무\s*인력\([^)]*⑦[^)]*\)[^\n\d\-]*{self._HOUR_NUMBER_RUN}",
+                rf"⑪소포계[ \t]+{self._HOUR_NUMBER_RUN}",
             ],
         )
         prod_match = self._match_staffing_numbers(
             table_section,
             text,
             [
-                r"인시당\s*처리물량\s*\(\s*처리물량\s*/[^)]*\)\s*\(\s*개\s*\)\s+((?:[\d.\-]+\s+)+[\d.\-]+)",
-                r"인시당\s*처리물량\(처리물량/⑪\)\(개\)\s+((?:[\d.\-]+\s+)+[\d.\-]+)",
+                rf"인시당\s*처리물량\s*\(\s*처리물량\s*/[^)]*\)\s*\(\s*개\s*\)[ \t]+{self._HOUR_NUMBER_RUN}",
+                rf"인시당\s*처리물량\(처리물량/⑪\)\(개\)[ \t]+{self._HOUR_NUMBER_RUN}",
+                rf"인시당\s*처리물량[^\n]{{0,40}}?[ \t]+{self._HOUR_NUMBER_RUN}",
             ],
         )
-        if staff_match is None:
-            staff_match = re.search(r"⑪소포계[^\d]*((?:[\d.\-]+\s+)+[\d.\-]+)", text)
         staff_values = self._parse_hour_row(staff_match.group(1) if staff_match else "")[: len(self.HOUR_SLOTS)]
         prod_values = self._parse_hour_row(prod_match.group(1) if prod_match else "")[: len(self.HOUR_SLOTS)]
         return staff_values, prod_values
@@ -455,8 +457,7 @@ class DailyKpiExtractor:
     ) -> re.Match[str] | None:
         for blob in (table_section, text):
             for pattern in patterns:
-                match = re.search(pattern, blob)
-                if match:
+                for match in re.finditer(pattern, blob):
                     tokens = match.group(1).split()
                     if 8 <= len(tokens) <= 16:
                         return match

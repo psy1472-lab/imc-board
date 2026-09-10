@@ -130,6 +130,36 @@ def test_hourly_omitted_dashes_and_staffing_from_2025_01_02():
     assert summary.productivity == 193.23
 
 
+def test_hourly_productivity_stays_on_same_line_for_2026_09_09():
+    """2단 편집에서 인시당 행이 다음 줄 숫자까지 삼키면 시간대 값이 전부 유실된다."""
+    text = (
+        "시간대별 처리 및 인력투입 현황 (평균 시간당 처리량(19시~00시) : 3.3만개)\n"
+        "구 분 ~18 18~ 19~ 20~ 21~ 22~ 23~ 0~ 1~ 2~ 3~ 4~ 5~ 6~ 합계\n"
+        "처리 발송 2.6 2.5 3.2 3.3 3.3 3.1 3.9 5.0 1.0 0.1 - - - - 28.0\n"
+        "물량 도착 - - - - - - - - 1.7 4.1 3.5 1.1 - - 10.4\n"
+        "(단위:만개) 계 2.6 2.5 3.2 3.3 3.3 3.1 3.9 5.0 2.7 4.2 3.5 1.1 - - 38.4\n"
+        "송 ※ 인시당 처리물량(①/②)(개) : 141\n"
+        "⑪소포계 - 131 175 178 182 110 133 169 202 202 171 107 8 4) 특이사항\n"
+        "실근무인력(①-④+⑦+⑩-⑨)(명)\n"
+        "인시당 처리물량(처리물량/⑪)(개) 195 185 184 184 285 293 294 131 209 203 103 2\n"
+        "- 1 - - 2 -\n"
+        "수집 40 36 27 25 13 7 3 1 - - - - - 152\n"
+    )
+    document = PdfDocument(
+        path="26.09.09.pdf",
+        pages=[PdfPage(index=0, text=text, tables=[])],
+    )
+    _, staffing = DailyKpiExtractor().extract_hourly(document, date(2026, 9, 9))
+    by_slot = {item.hour_slot: item for item in staffing}
+    assert by_slot["~18"].actual_staff is None
+    assert by_slot["18"].actual_staff == 131
+    assert by_slot["18"].productivity == 195
+    assert by_slot["23"].productivity == 293
+    assert by_slot["00"].productivity == 294
+    assert by_slot["05"].productivity == 2
+    assert by_slot["06"].productivity is None
+
+
 def test_compact_hourly_alignment():
     extractor = DailyKpiExtractor()
     hourly, _ = extractor.extract_hourly(_compact_document(), date(2026, 4, 26), profile=COMPACT_PROFILE)
