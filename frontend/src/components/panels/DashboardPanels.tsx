@@ -119,19 +119,16 @@ type TransportCardProps = {
   remaining?: boolean;
 };
 
-function formatVehicleQuotaLine(
-  actual?: number | null,
-  standard?: number | null,
-  standardLabel = "쿼터기준",
-) {
-  const actualText = actual == null ? "-" : `${actual}대`;
-  const standardText = standard == null ? "-" : `${standard}대`;
-  return `차량수 ${actualText} / ${standardLabel} ${standardText}`;
-}
-
 function TransportCard({ label, data, standardLabel = "쿼터기준", remaining = false }: TransportCardProps) {
   const { palette } = useTheme();
   const overQuota = !remaining && data.actual != null && data.standard != null && data.actual > data.standard;
+  const captionStyle = {
+    color: overQuota ? palette.warning : palette.normal,
+    fontSize: 12,
+    fontWeight: 400,
+  } as const;
+  const actualText = data.actual == null ? "-" : `${data.actual}대`;
+  const standardText = data.standard == null ? "-" : `${data.standard}대`;
 
   return (
     <div
@@ -143,13 +140,18 @@ function TransportCard({ label, data, standardLabel = "쿼터기준", remaining 
       }}
     >
       <div style={{ color: palette.muted, fontSize: 12, whiteSpace: "nowrap" }}>{label}</div>
-      <div style={{ fontSize: remaining ? 20 : 15, fontWeight: 700, marginTop: 8, lineHeight: 1.4 }}>
-        {remaining
-          ? data.actual === 0
-            ? "없음"
-            : (data.actual ?? "-")
-          : formatVehicleQuotaLine(data.actual, data.standard, standardLabel)}
-      </div>
+      {remaining ? (
+        <div style={{ fontSize: 20, fontWeight: 700, marginTop: 8, lineHeight: 1.4 }}>
+          {data.actual === 0 ? "없음" : (data.actual ?? "-")}
+        </div>
+      ) : (
+        <div style={{ marginTop: 8, lineHeight: 1.4, fontWeight: 700, fontSize: 15 }}>
+          <span style={captionStyle}>차량수 </span>
+          {actualText}
+          <span style={captionStyle}> / {standardLabel} </span>
+          {standardText}
+        </div>
+      )}
       {remaining ? null : (
         <div
           style={{
