@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { BenchmarkTable, type BenchmarkRow } from "../components/analysis/BenchmarkTable";
 import { EquipmentThroughputChart } from "../components/charts/EquipmentThroughputChart";
 import { EquipmentTrendChart } from "../components/charts/EquipmentTrendChart";
+import { MachineSortingChart } from "../components/charts/MachineSortingChart";
 import { PageState } from "../components/PageState";
 import { buildEquipmentTrendChartData } from "../lib/equipmentTrendChartData";
 import { compareToBenchmarkKey, TREND_OPTIONS } from "../lib/dashboardCompare";
@@ -10,7 +11,58 @@ import { useTheme } from "../context/ThemeContext";
 import { useRequestGeneration } from "../hooks/useRequestGeneration";
 import { fetchEquipmentAnalysis } from "../lib/api";
 import { formatNumber } from "../styles/theme";
-import type { EquipmentAnalysis, EquipmentBenchmark } from "../types/equipmentAnalysis";
+import type { EquipmentAnalysis, EquipmentBenchmark, MachineSortingStream, MachineSortingTrendSeries } from "../types/equipmentAnalysis";
+
+const MACHINE_STREAM_OPTIONS: Array<{ value: MachineSortingStream; label: string }> = [
+  { value: "dispatch", label: "발송" },
+  { value: "arrival", label: "도착" },
+];
+
+function emptyMachineStreamTrend(length: number): MachineSortingTrendSeries["dispatch"] {
+  const empty = Array.from({ length }, () => null);
+  return {
+    deck1Volume: [...empty],
+    deck2Volume: [...empty],
+    deck3Volume: [...empty],
+    deck1Share: [...empty],
+    deck2Share: [...empty],
+    deck3Share: [...empty],
+  };
+}
+
+function machineSortingToTrend(
+  machineSorting: EquipmentAnalysis["machineSorting"],
+  reportDate: string,
+): MachineSortingTrendSeries | null {
+  if (!machineSorting) return null;
+  const hasValue =
+    (machineSorting.dispatch?.length ?? 0) > 0 || (machineSorting.arrival?.length ?? 0) > 0;
+  if (!hasValue) return null;
+
+  const toStream = (rows: NonNullable<EquipmentAnalysis["machineSorting"]>["dispatch"]) => {
+    const payload = emptyMachineStreamTrend(1);
+    for (const row of rows ?? []) {
+      if (row.deck === 1) {
+        payload.deck1Volume[0] = row.volume ?? null;
+        payload.deck1Share[0] = row.shareRate ?? null;
+      } else if (row.deck === 2) {
+        payload.deck2Volume[0] = row.volume ?? null;
+        payload.deck2Share[0] = row.shareRate ?? null;
+      } else if (row.deck === 3) {
+        payload.deck3Volume[0] = row.volume ?? null;
+        payload.deck3Share[0] = row.shareRate ?? null;
+      }
+    }
+    return payload;
+  };
+
+  return {
+    reportDates: [reportDate],
+    dates: [reportDate.slice(5)],
+    dispatch: toStream(machineSorting.dispatch),
+    arrival: toStream(machineSorting.arrival),
+  };
+}
 
 function formatPercent(value?: number | null) {
   if (value === null || value === undefined) return "-";
@@ -68,6 +120,7 @@ export default function EquipmentAnalysisPage() {
   const [data, setData] = useState<EquipmentAnalysis | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [machineStream, setMachineStream] = useState<MachineSortingStream>("dispatch");
   const activeBenchmarkKey = compareToBenchmarkKey(compare);
 
   const loadData = (date = selectedDate) => {
@@ -110,6 +163,15 @@ export default function EquipmentAnalysisPage() {
     if (!trendData) return null;
     return buildEquipmentTrendChartData(trendData, data?.meta.reportDate);
   }, [trendData, data?.meta.reportDate]);
+
+  const machineSortingTrend = useMemo(() => {
+    if (!data) return null;
+    const series = data.machineSortingTrends?.[trendView];
+    if (series && (series.mode === "weekday" || series.dates.length > 0)) {
+      return series;
+    }
+    return machineSortingToTrend(data.machineSorting, data.meta.reportDate);
+  }, [data, trendView]);
 
   const panelStyle = {
     background: palette.panel,
@@ -218,6 +280,71 @@ export default function EquipmentAnalysisPage() {
               </select>
             </div>
             {trendData ? <EquipmentThroughputChart data={trendData} referenceDate={data.meta.reportDate} /> : null}
+          </div>
+        </div>
+
+        <div style={panelStyle}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 12,
+              marginBottom: 12,
+              flexWrap: "wrap",
+            }}
+          >
+            <h3 style={{ margin: 0 }}>기계구분 처리현황</h3>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <select
+                value={machineStream}
+                onChange={(e) => setMachineStream(e.target.value as MachineSortingStream)}
+                style={{
+                  padding: "8px 12px",
+                  background: palette.inputBg,
+                  color: palette.text,
+                  border: `1px solid ${palette.border}`,
+                  borderRadius: 8,
+                  fontSize: 13,
+                }}
+              >
+                {MACHINE_STREAM_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={trendView}
+                onChange={(e) => setVolumeTrendView(e.target.value as typeof trendView)}
+                style={{
+                  padding: "8px 12px",
+                  background: palette.inputBg,
+                  color: palette.text,
+                  border: `1px solid ${palette.border}`,
+                  borderRadius: 8,
+                  fontSize: 13,
+                }}
+              >
+                {TREND_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          {machineSortingTrend ? (
+            <MachineSortingChart
+              data={machineSortingTrend}
+              stream={machineStream}
+              referenceDate={data.meta.reportDate}
+            />
+          ) : null}
+          <div style={{ marginTop: 8, color: palette.muted, fontSize: 12 }}>
+            {trendView === "weekday"
+              ? "최근 30업무일 이내 기계구분 단별 값의 요일 평균입니다."
+              : `${trendTitle} · 기계구분 단별 값이 있는 날짜만 표시됩니다.`}
           </div>
         </div>
 

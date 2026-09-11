@@ -79,6 +79,15 @@ class SortingMachine:
 
 
 @dataclass
+class MachineSortingLine:
+    report_date: date
+    stream: str
+    deck: int
+    volume: int | None = None
+    share_rate: float | None = None
+
+
+@dataclass
 class SafetyCategory:
     report_date: date
     category: str
@@ -120,6 +129,7 @@ class ParsedReport:
     quota_exchange: QuotaExchange | None = None
     transport_offices: list[TransportOffice] = field(default_factory=list)
     sorting_machine: SortingMachine | None = None
+    machine_sorting: list[MachineSortingLine] = field(default_factory=list)
     safety_categories: list[SafetyCategory] = field(default_factory=list)
     safety_incidents: list[SafetyIncident] = field(default_factory=list)
     anomalies: list[Anomaly] = field(default_factory=list)

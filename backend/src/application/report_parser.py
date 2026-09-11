@@ -7,6 +7,7 @@ from domain.entities import Anomaly, ParsedReport
 from domain.format_profile import FormatProfile
 from infrastructure.pdf.extractors.daily_kpi import DailyKpiExtractor
 from infrastructure.pdf.extractors.operations import (
+    MachineSortingExtractor,
     QuotaExchangeExtractor,
     SafetyCheckExtractor,
     SortingMachineExtractor,
@@ -25,6 +26,7 @@ class ReportParser:
         self.quota_extractor = QuotaExchangeExtractor()
         self.transport_extractor = TransportExtractor()
         self.sorting_extractor = SortingMachineExtractor()
+        self.machine_sorting_extractor = MachineSortingExtractor()
         self.safety_extractor = SafetyCheckExtractor()
         self.validator = DataValidator()
 
@@ -47,6 +49,7 @@ class ReportParser:
             safety_categories, safety_incidents = self.safety_extractor.extract(document, report_date)
 
         sorting = self.sorting_extractor.extract(document, report_date)
+        machine_sorting = self.machine_sorting_extractor.extract(document, report_date)
 
         if sorting and sorting.ips_rate is not None:
             summary.ips_rate = sorting.ips_rate
@@ -66,6 +69,7 @@ class ReportParser:
             quota_exchange=quota,
             transport_offices=transport,
             sorting_machine=sorting,
+            machine_sorting=machine_sorting,
             safety_categories=safety_categories,
             safety_incidents=safety_incidents,
             anomalies=self._build_anomalies(

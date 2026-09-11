@@ -60,11 +60,26 @@ class SqliteRepository:
                 "001_initial_schema.sql",
                 "002_operation_period.sql",
                 "003_daily_forecast.sql",
+                "004_machine_sorting.sql",
             ):
                 migration_path = migrations_dir / migration_name
+                if not migration_path.exists():
+                    migration_path = Path(__file__).resolve().parents[3] / "migrations" / migration_name
                 if migration_path.exists():
                     with open(migration_path, encoding="utf-8") as file:
                         conn.executescript(file.read())
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS machine_sorting (
+                    report_date TEXT NOT NULL,
+                    stream TEXT NOT NULL,
+                    deck INTEGER NOT NULL,
+                    volume INTEGER,
+                    share_rate REAL,
+                    PRIMARY KEY (report_date, stream, deck)
+                )
+                """
+            )
             try:
                 conn.execute("ALTER TABLE report_metadata ADD COLUMN day_type TEXT")
             except sqlite3.OperationalError:
@@ -226,6 +241,23 @@ class SqliteRepository:
                         s.peak_throughput,
                         s.unread_count,
                         s.unread_rate,
+                    ),
+                )
+
+            conn.execute("DELETE FROM machine_sorting WHERE report_date = ?", (report_date,))
+            for item in report.machine_sorting:
+                conn.execute(
+                    """
+                    INSERT INTO machine_sorting
+                    (report_date, stream, deck, volume, share_rate)
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (
+                        report_date,
+                        item.stream,
+                        item.deck,
+                        item.volume,
+                        item.share_rate,
                     ),
                 )
 
@@ -1340,6 +1372,7 @@ class SqliteRepository:
                 """,
                 (report_date,),
             ).fetchall()
+            machine_rows = self._fetch_machine_sorting_rows(conn, report_date)
 
         trend_7d = trend_rows[:7]
         trend_30d = trend_rows
@@ -1355,6 +1388,16 @@ class SqliteRepository:
         ]
         prev_day_rows = prev_rows[:1]
         current_summary = self._equipment_summary(sorting)
+        machine_sorting = self._serialize_machine_sorting(machine_rows)
+        if not machine_sorting["dispatch"] and not machine_sorting["arrival"]:
+            machine_sorting = self._backfill_machine_sorting(report_date)
+
+        dates_30 = [row["report_date"] for row in reversed(trend_30d)]
+        dates_7 = [row["report_date"] for row in reversed(trend_7d)]
+        self._ensure_machine_sorting_for_dates(dates_30)  # same window as equipment trend
+        with self._connect() as conn:
+            history_rows = self._fetch_machine_sorting_history(conn, report_date)
+        grouped = self._group_machine_sorting_history(history_rows)
 
         return {
             "meta": {
@@ -1378,7 +1421,253 @@ class SqliteRepository:
                 "weekday": self._serialize_equipment_weekday_average(trend_30d),
             },
             "dailyTrend": trend_30d_series,
+            "machineSorting": machine_sorting,
+            "machineSortingTrends": {
+                "7d": self._serialize_machine_sorting_trend(grouped, dates_7),
+                "30d": self._serialize_machine_sorting_trend(grouped, dates_30),
+                "weekday": self._serialize_machine_sorting_weekday(grouped, dates_30),
+            },
         }
+
+    def _fetch_machine_sorting_rows(self, conn, report_date: str) -> list:
+        try:
+            return conn.execute(
+                """
+                SELECT stream, deck, volume, share_rate
+                FROM machine_sorting
+                WHERE report_date = ?
+                ORDER BY stream, deck
+                """,
+                (report_date,),
+            ).fetchall()
+        except Exception as exc:  # noqa: BLE001
+            if "machine_sorting" not in str(exc):
+                raise
+            return []
+
+    def _fetch_machine_sorting_history(self, conn, report_date: str) -> list:
+        try:
+            return conn.execute(
+                """
+                SELECT report_date, stream, deck, volume, share_rate
+                FROM machine_sorting
+                WHERE report_date <= ?
+                ORDER BY report_date, stream, deck
+                """,
+                (report_date,),
+            ).fetchall()
+        except Exception as exc:  # noqa: BLE001
+            if "machine_sorting" not in str(exc):
+                raise
+            return []
+
+    def _group_machine_sorting_history(self, rows: list) -> dict[str, dict]:
+        grouped: dict[str, dict] = {}
+        for row in rows or []:
+            stream = row["stream"]
+            if stream not in ("dispatch", "arrival"):
+                continue
+            report_dt = row["report_date"]
+            day = grouped.setdefault(report_dt, {"dispatch": {}, "arrival": {}})
+            day[stream][int(row["deck"])] = {
+                "volume": row["volume"],
+                "shareRate": row["share_rate"],
+            }
+        return grouped
+
+    def _machine_stream_trend(self, grouped: dict[str, dict], dates: list[str], stream: str) -> dict:
+        payload = {
+            "deck1Volume": [],
+            "deck2Volume": [],
+            "deck3Volume": [],
+            "deck1Share": [],
+            "deck2Share": [],
+            "deck3Share": [],
+        }
+        for report_dt in dates:
+            decks = grouped.get(report_dt, {}).get(stream, {})
+            for deck in (1, 2, 3):
+                item = decks.get(deck) or {}
+                payload[f"deck{deck}Volume"].append(item.get("volume"))
+                payload[f"deck{deck}Share"].append(item.get("shareRate"))
+        return payload
+
+    def _serialize_machine_sorting_trend(self, grouped: dict[str, dict], dates: list[str]) -> dict:
+        return {
+            "reportDates": dates,
+            "dates": [item[5:] for item in dates],
+            "dispatch": self._machine_stream_trend(grouped, dates, "dispatch"),
+            "arrival": self._machine_stream_trend(grouped, dates, "arrival"),
+        }
+
+    def _serialize_machine_sorting_weekday(self, grouped: dict[str, dict], dates: list[str]) -> dict:
+        weekday_labels = ["월", "화", "수", "목", "금", "토", "일"]
+        buckets: dict[int, list[str]] = {index: [] for index in range(7)}
+        for report_dt in dates:
+            buckets[date.fromisoformat(report_dt).weekday()].append(report_dt)
+
+        def avg_series(stream: str, deck: int, field: str) -> list:
+            series: list[float | None] = []
+            for weekday in range(7):
+                values = []
+                for report_dt in buckets[weekday]:
+                    item = grouped.get(report_dt, {}).get(stream, {}).get(deck) or {}
+                    value = item.get(field)
+                    if value is not None:
+                        values.append(value)
+                if not values:
+                    series.append(None)
+                elif field == "shareRate":
+                    series.append(round(sum(values) / len(values), 1))
+                else:
+                    series.append(round(sum(values) / len(values)))
+            return series
+
+        def stream_payload(stream: str) -> dict:
+            return {
+                "deck1Volume": avg_series(stream, 1, "volume"),
+                "deck2Volume": avg_series(stream, 2, "volume"),
+                "deck3Volume": avg_series(stream, 3, "volume"),
+                "deck1Share": avg_series(stream, 1, "shareRate"),
+                "deck2Share": avg_series(stream, 2, "shareRate"),
+                "deck3Share": avg_series(stream, 3, "shareRate"),
+            }
+
+        return {
+            "mode": "weekday",
+            "labels": weekday_labels,
+            "reportDates": weekday_labels,
+            "dates": weekday_labels,
+            "sampleCounts": [len(buckets[index]) for index in range(7)],
+            "dispatch": stream_payload("dispatch"),
+            "arrival": stream_payload("arrival"),
+        }
+
+    def _serialize_machine_sorting(self, rows: list) -> dict:
+        payload = {"dispatch": [], "arrival": []}
+        for row in rows or []:
+            stream = row["stream"]
+            if stream not in payload:
+                continue
+            payload[stream].append(
+                {
+                    "deck": int(row["deck"]),
+                    "volume": row["volume"],
+                    "shareRate": row["share_rate"],
+                }
+            )
+        for stream in payload:
+            payload[stream].sort(key=lambda item: item["deck"])
+        return payload
+
+    def _save_machine_sorting_lines(self, report_date: str, lines) -> None:
+        with self._connect() as conn:
+            conn.execute("DELETE FROM machine_sorting WHERE report_date = ?", (report_date,))
+            for item in lines:
+                conn.execute(
+                    """
+                    INSERT INTO machine_sorting
+                    (report_date, stream, deck, volume, share_rate)
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (report_date, item.stream, item.deck, item.volume, item.share_rate),
+                )
+            conn.commit()
+
+    def _uploads_dir(self) -> Path:
+        db_path = Path(str(self.db_path))
+        if db_path.suffix == ".db":
+            return db_path.parent / "uploads"
+        from infrastructure.config import resolve_upload_dir
+
+        return resolve_upload_dir()
+
+    def _resolve_report_pdf(self, report_date: str) -> Path | None:
+        file_path = self.get_report_file_path(report_date)
+        candidates: list[Path] = []
+        if file_path:
+            stored = Path(file_path)
+            candidates.append(stored)
+            candidates.append(self._uploads_dir() / stored.name)
+        report_day = date.fromisoformat(report_date)
+        candidates.append(self._uploads_dir() / f"IMC_{report_day.strftime('%y.%m.%d')}.pdf")
+        seen: set[str] = set()
+        for candidate in candidates:
+            key = str(candidate)
+            if key in seen:
+                continue
+            seen.add(key)
+            if candidate.exists():
+                return candidate
+        return None
+
+    def _existing_machine_sorting_dates(self, dates: list[str]) -> set[str]:
+        if not dates:
+            return set()
+        placeholders = ",".join("?" * len(dates))
+        try:
+            with self._connect() as conn:
+                rows = conn.execute(
+                    f"SELECT DISTINCT report_date FROM machine_sorting WHERE report_date IN ({placeholders})",
+                    dates,
+                ).fetchall()
+        except Exception as exc:  # noqa: BLE001
+            if "machine_sorting" not in str(exc):
+                raise
+            return set()
+        return {row["report_date"] for row in rows}
+
+    def _ensure_machine_sorting_for_dates(self, dates: list[str]) -> None:
+        if not dates:
+            return
+        if not hasattr(self, "_machine_sorting_misses"):
+            self._machine_sorting_misses = set()
+        existing = self._existing_machine_sorting_dates(dates)
+        for report_dt in dates:
+            if report_dt in existing or report_dt in self._machine_sorting_misses:
+                continue
+            path = self._resolve_report_pdf(report_dt)
+            if path is None:
+                self._machine_sorting_misses.add(report_dt)
+                continue
+            payload = self._backfill_machine_sorting_from_path(report_dt, path)
+            if payload["dispatch"] or payload["arrival"]:
+                existing.add(report_dt)
+            else:
+                self._machine_sorting_misses.add(report_dt)
+
+    def _backfill_machine_sorting_from_path(self, report_date: str, file_path: Path) -> dict:
+        from infrastructure.pdf.extractors.operations import MachineSortingExtractor
+        from infrastructure.pdf.reader import PdfReader
+
+        try:
+            document = PdfReader().read(str(file_path))
+            lines = MachineSortingExtractor().extract(document, date.fromisoformat(report_date))
+        except Exception:  # noqa: BLE001
+            return {"dispatch": [], "arrival": []}
+        if not lines:
+            return {"dispatch": [], "arrival": []}
+        try:
+            self._save_machine_sorting_lines(report_date, lines)
+        except Exception:  # noqa: BLE001
+            pass
+        return self._serialize_machine_sorting(
+            [
+                {
+                    "stream": item.stream,
+                    "deck": item.deck,
+                    "volume": item.volume,
+                    "share_rate": item.share_rate,
+                }
+                for item in lines
+            ]
+        )
+
+    def _backfill_machine_sorting(self, report_date: str) -> dict:
+        path = self._resolve_report_pdf(report_date)
+        if path is None:
+            return {"dispatch": [], "arrival": []}
+        return self._backfill_machine_sorting_from_path(report_date, path)
 
     _ANOMALY_CATEGORY_LABELS = {
         "volume": "물량",
@@ -1938,6 +2227,7 @@ class SqliteRepository:
             "transport_office",
             "safety_summary",
             "safety_incident",
+            "machine_sorting",
             "anomaly",
             "validation_log",
             "kpi_comparison",

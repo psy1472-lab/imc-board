@@ -3,9 +3,9 @@ from __future__ import annotations
 import re
 from datetime import date, time
 
-from domain.entities import QuotaExchange, SortingMachine, TransportOffice
+from domain.entities import MachineSortingLine, QuotaExchange, SortingMachine, TransportOffice
 from domain.transport_quota import quota_overage, quota_status
-from infrastructure.normalizer import parse_int, parse_rate, to_int_or_zero
+from infrastructure.normalizer import normalize_heading, parse_int, parse_rate, to_int_or_zero
 from infrastructure.pdf.reader import PdfDocument
 
 
@@ -213,6 +213,121 @@ class SortingMachineExtractor:
             unread_count=unread_count,
             unread_rate=unread_rate,
         )
+
+
+class MachineSortingExtractor:
+    DECK_RE = re.compile(r"([123])\s*단")
+    DECK_LINE_RE = re.compile(r"([123])단\s+([\d,]+)\s+([\d.]+)")
+    SECTION_RE = re.compile(
+        r"기계구분\s*/\s*수작업[\s\S]+?(?:소포위탁배달원|중점추진|$)",
+    )
+
+    def extract(self, document: PdfDocument, report_date: date) -> list[MachineSortingLine]:
+        for page in document.pages:
+            heading = normalize_heading(page.text)
+            for table in page.tables or []:
+                lines = self._from_table(table, report_date)
+                if self._is_usable(lines):
+                    return lines
+            if "기계구분" in heading and "수작업" in heading:
+                lines = self._from_text(page.text, report_date)
+                if self._is_usable(lines):
+                    return lines
+        return []
+
+    def _is_usable(self, lines: list[MachineSortingLine]) -> bool:
+        decks = {(item.stream, item.deck) for item in lines}
+        return len(decks) >= 3
+
+    def _norm(self, value: str | None) -> str:
+        return re.sub(r"\s+", "", value or "")
+
+    def _from_table(self, table, report_date: date) -> list[MachineSortingLine]:
+        if not table:
+            return []
+        header_blob = "".join(self._norm(cell) for row in table[:3] for cell in row)
+        if "기계구분" not in header_blob or "점유비" not in header_blob:
+            return []
+
+        volume_idx, share_idx = 2, 3
+        for row in table[:3]:
+            for index, cell in enumerate(row):
+                normalized = self._norm(cell)
+                if normalized == "기계구분":
+                    volume_idx = index
+                elif normalized == "점유비":
+                    share_idx = index
+
+        current_stream: str | None = None
+        lines: list[MachineSortingLine] = []
+        seen: set[tuple[str, int]] = set()
+        for row in table:
+            cells = list(row or [])
+            joined = "".join(self._norm(cell) for cell in cells)
+            if "합계" in joined:
+                continue
+
+            first = self._norm(cells[0]) if cells else ""
+            if "발송" in first:
+                current_stream = "dispatch"
+            elif "도착" in first:
+                current_stream = "arrival"
+
+            deck = None
+            for cell in cells[:3]:
+                match = self.DECK_RE.search(self._norm(cell))
+                if match:
+                    deck = int(match.group(1))
+                    break
+            if deck is None or current_stream is None:
+                continue
+
+            key = (current_stream, deck)
+            if key in seen:
+                continue
+            volume_raw = cells[volume_idx] if len(cells) > volume_idx else None
+            share_raw = cells[share_idx] if len(cells) > share_idx else None
+            volume, _ = parse_int(volume_raw)
+            share_rate, _ = parse_rate(share_raw)
+            if volume is None and share_rate is None:
+                continue
+            seen.add(key)
+            lines.append(
+                MachineSortingLine(
+                    report_date=report_date,
+                    stream=current_stream,
+                    deck=deck,
+                    volume=volume,
+                    share_rate=share_rate,
+                )
+            )
+        return lines
+
+    def _from_text(self, text: str, report_date: date) -> list[MachineSortingLine]:
+        section_match = self.SECTION_RE.search(text)
+        section = section_match.group(0) if section_match else text
+        matches = self.DECK_LINE_RE.findall(section)
+        if len(matches) < 3:
+            return []
+
+        expected = [1, 2, 3, 1, 2, 3]
+        streams = ["dispatch", "dispatch", "dispatch", "arrival", "arrival", "arrival"]
+        lines: list[MachineSortingLine] = []
+        for index, (deck_raw, volume_raw, share_raw) in enumerate(matches[:6]):
+            if int(deck_raw) != expected[index]:
+                return []
+            volume, _ = parse_int(volume_raw)
+            share_rate, _ = parse_rate(share_raw)
+            lines.append(
+                MachineSortingLine(
+                    report_date=report_date,
+                    stream=streams[index],
+                    deck=int(deck_raw),
+                    volume=volume,
+                    share_rate=share_rate,
+                )
+            )
+        return lines
 
 
 class SafetyCheckExtractor:

@@ -53,4 +53,42 @@ export type EquipmentAnalysis = {
     weekday: EquipmentTrendSeries;
   };
   dailyTrend: EquipmentTrendSeries;
+  machineSorting?: MachineSorting;
+  machineSortingTrends?: {
+    "7d": MachineSortingTrendSeries;
+    "30d": MachineSortingTrendSeries;
+    weekday: MachineSortingTrendSeries;
+  };
+};
+
+export type MachineSortingDeck = {
+  deck: number;
+  volume?: number | null;
+  shareRate?: number | null;
+};
+
+export type MachineSorting = {
+  dispatch: MachineSortingDeck[];
+  arrival: MachineSortingDeck[];
+};
+
+export type MachineSortingStream = "dispatch" | "arrival";
+
+export type MachineSortingStreamTrend = {
+  deck1Volume: Array<number | null>;
+  deck2Volume: Array<number | null>;
+  deck3Volume: Array<number | null>;
+  deck1Share: Array<number | null>;
+  deck2Share: Array<number | null>;
+  deck3Share: Array<number | null>;
+};
+
+export type MachineSortingTrendSeries = {
+  mode?: "weekday";
+  labels?: string[];
+  reportDates: string[];
+  dates: string[];
+  sampleCounts?: number[];
+  dispatch: MachineSortingStreamTrend;
+  arrival: MachineSortingStreamTrend;
 };
