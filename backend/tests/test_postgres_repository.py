@@ -40,6 +40,15 @@ class PostgresAdapterTests(unittest.TestCase):
         dumped = _as_json_param({"total_volume": "37.6만"})
         self.assertEqual(type(adapted[1]).__name__, type(dumped).__name__)
 
+    def test_serial_sync_sql_uses_max_id(self) -> None:
+        from infrastructure.db.postgres_repository import PostgresRepository
+
+        sql = PostgresRepository.serial_sync_sql("anomaly")
+        self.assertIn("pg_get_serial_sequence('anomaly', 'id')", sql)
+        self.assertIn("MAX(id) FROM anomaly", sql)
+        with self.assertRaises(ValueError):
+            PostgresRepository.serial_sync_sql("daily_summary")
+
 
 @unittest.skipUnless(
     os.getenv("DATABASE_URL", "").startswith("postgres"),
