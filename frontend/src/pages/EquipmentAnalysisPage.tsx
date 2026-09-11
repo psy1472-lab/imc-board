@@ -18,6 +18,45 @@ const MACHINE_STREAM_OPTIONS: Array<{ value: MachineSortingStream; label: string
   { value: "arrival", label: "도착" },
 ];
 
+function FilterToggleGroup<T extends string>({
+  value,
+  options,
+  onChange,
+}: {
+  value: T;
+  options: Array<{ value: T; label: string }>;
+  onChange: (value: T) => void;
+}) {
+  const { palette } = useTheme();
+  return (
+    <div role="group" style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+      {options.map((option) => {
+        const active = option.value === value;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            aria-pressed={active}
+            onClick={() => onChange(option.value)}
+            style={{
+              padding: "7px 12px",
+              background: active ? palette.panelAlt : palette.inputBg,
+              color: active ? palette.text : palette.muted,
+              border: `1px solid ${active ? palette.caution : palette.border}`,
+              borderRadius: 8,
+              fontSize: 13,
+              cursor: "pointer",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function emptyMachineStreamTrend(length: number): MachineSortingTrendSeries["dispatch"] {
   const empty = Array.from({ length }, () => null);
   return {
@@ -295,43 +334,17 @@ export default function EquipmentAnalysisPage() {
             }}
           >
             <h3 style={{ margin: 0 }}>기계구분 처리현황</h3>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <select
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
+              <FilterToggleGroup
                 value={machineStream}
-                onChange={(e) => setMachineStream(e.target.value as MachineSortingStream)}
-                style={{
-                  padding: "8px 12px",
-                  background: palette.inputBg,
-                  color: palette.text,
-                  border: `1px solid ${palette.border}`,
-                  borderRadius: 8,
-                  fontSize: 13,
-                }}
-              >
-                {MACHINE_STREAM_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-              <select
+                options={MACHINE_STREAM_OPTIONS}
+                onChange={setMachineStream}
+              />
+              <FilterToggleGroup
                 value={trendView}
-                onChange={(e) => setVolumeTrendView(e.target.value as typeof trendView)}
-                style={{
-                  padding: "8px 12px",
-                  background: palette.inputBg,
-                  color: palette.text,
-                  border: `1px solid ${palette.border}`,
-                  borderRadius: 8,
-                  fontSize: 13,
-                }}
-              >
-                {TREND_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+                options={TREND_OPTIONS}
+                onChange={setVolumeTrendView}
+              />
             </div>
           </div>
           {machineSortingTrend ? (
