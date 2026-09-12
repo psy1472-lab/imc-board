@@ -15,6 +15,5 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "AI 운영 브리핑", path: "/briefing", ready: true },
   { label: "보고서·다운로드", path: "/reports", ready: true, adminOnly: true },
   { label: "시스템 관리", path: "/settings", ready: true, adminOnly: true },
+  { label: "사용자 가이드", path: "/guide", ready: true },
 ];
-
-export const GUIDE_NAV_ITEM: NavItem = { label: "사용자 가이드", path: "/guide", ready: true };

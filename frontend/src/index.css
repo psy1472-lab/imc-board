@@ -101,12 +101,6 @@ select, input {
   overflow-y: auto;
 }
 
-.imc-sidebar-guide {
-  flex-shrink: 0;
-  padding-top: 12px;
-  margin-top: 8px;
-}
-
 .imc-sidebar--collapsed {
   width: var(--imc-sidebar-collapsed-width);
   padding: 16px 10px;
@@ -124,7 +118,6 @@ select, input {
 
 .imc-sidebar--collapsed .imc-sidebar-label,
 .imc-sidebar--collapsed .imc-sidebar-filters,
-.imc-sidebar--collapsed .imc-sidebar-guide .imc-nav-text,
 .imc-sidebar--collapsed .imc-nav-text,
 .imc-sidebar--collapsed .imc-admin-logout {
   display: none;

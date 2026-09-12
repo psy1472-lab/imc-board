@@ -6,7 +6,7 @@ import { CommunicationStatusBadge } from "../components/header/CommunicationStat
 import { OperationPeriodBadge } from "../components/header/OperationPeriodBadge";
 import { ThemeToggle } from "../components/header/ThemeToggle";
 import { ReportDateCalendar } from "../components/filters/ReportDateCalendar";
-import { GUIDE_NAV_ITEM, NAV_ITEMS } from "../config/navigation";
+import { NAV_ITEMS } from "../config/navigation";
 import { useAdminAuth } from "../context/AdminAuthContext";
 import { useDashboardFilters } from "../context/DashboardFilterContext";
 import { useTheme } from "../context/ThemeContext";
@@ -157,28 +157,28 @@ export function DashboardLayout() {
                 {!item.ready ? <span style={{ fontSize: 11, marginLeft: 6 }}>준비중</span> : null}
               </span>
             </NavLink>
-            {item.path === "/settings" && isAdmin ? (
-              <button
-                type="button"
-                className="imc-admin-logout"
-                onClick={logout}
-                style={{
-                  width: "100%",
-                  marginBottom: 6,
-                  padding: "8px 12px",
-                  borderRadius: 8,
-                  border: `1px solid ${palette.border}`,
-                  background: palette.panelAlt,
-                  color: palette.muted,
-                  fontSize: 12,
-                  cursor: "pointer",
-                }}
-              >
-                관리자 모드 종료
-              </button>
-            ) : null}
           </div>
         ))}
+        {isAdmin ? (
+          <button
+            type="button"
+            className="imc-admin-logout"
+            onClick={logout}
+            style={{
+              width: "100%",
+              marginBottom: 6,
+              padding: "8px 12px",
+              borderRadius: 8,
+              border: `1px solid ${palette.border}`,
+              background: palette.panelAlt,
+              color: palette.muted,
+              fontSize: 12,
+              cursor: "pointer",
+            }}
+          >
+            관리자 모드 종료
+          </button>
+        ) : null}
         <div className="imc-sidebar-filters" style={{ marginTop: 28, paddingTop: 20, borderTop: `1px solid ${palette.border}` }}>
           <div style={{ color: palette.muted, fontSize: 12, marginBottom: 8 }}>조회 일자</div>
           <ReportDateCalendar dates={dates} value={selectedDate} onChange={setSelectedDate} />
@@ -195,23 +195,6 @@ export function DashboardLayout() {
             </label>
           ))}
         </div>
-        </div>
-        <div className="imc-sidebar-guide" style={{ borderTop: `1px solid ${palette.border}` }}>
-          <NavLink
-            to={GUIDE_NAV_ITEM.path}
-            title={GUIDE_NAV_ITEM.label}
-            style={({ isActive }) => ({
-              display: "block",
-              padding: "10px 12px",
-              borderRadius: 8,
-              textDecoration: "none",
-              background: isActive ? palette.panel : "transparent",
-              color: isActive ? palette.text : palette.muted,
-              overflow: "hidden",
-            })}
-          >
-            <span className="imc-nav-text">{GUIDE_NAV_ITEM.label}</span>
-          </NavLink>
         </div>
       </aside>
 
