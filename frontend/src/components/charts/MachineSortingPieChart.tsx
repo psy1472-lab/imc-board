@@ -51,10 +51,10 @@ function StreamPie({ title, slices }: { title: string; slices: Slice[] }) {
   const total = slices.reduce((sum, item) => sum + (item.volume ?? 0), 0);
 
   return (
-    <div style={{ minWidth: 0 }}>
+    <div style={{ minWidth: 0, overflow: "hidden" }}>
       <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, textAlign: "center" }}>{title}</div>
       {hasValue ? (
-        <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, minWidth: 0 }}>
           <div style={{ width: 132, height: 132, flex: "0 0 132px", position: "relative" }}>
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -103,22 +103,43 @@ function StreamPie({ title, slices }: { title: string; slices: Slice[] }) {
               <div style={{ fontSize: 12, fontWeight: 700 }}>{formatNumber(total)}</div>
             </div>
           </div>
-          <div style={{ display: "grid", gap: 6, minWidth: 0, flex: 1 }}>
+          <div style={{ display: "grid", gap: 6, width: "100%", minWidth: 0 }}>
             {slices.map((item) => (
-              <div key={item.label} style={{ display: "flex", alignItems: "baseline", gap: 8, fontSize: 12 }}>
+              <div
+                key={item.label}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "8px 28px minmax(0, 1fr) auto",
+                  alignItems: "baseline",
+                  columnGap: 8,
+                  fontSize: 12,
+                  minWidth: 0,
+                }}
+              >
                 <span
                   style={{
                     width: 8,
                     height: 8,
                     borderRadius: 99,
                     background: item.color,
-                    flex: "0 0 8px",
                     transform: "translateY(-1px)",
                   }}
                 />
-                <span style={{ color: palette.muted, width: 28 }}>{item.label}</span>
-                <span style={{ fontWeight: 600, minWidth: 0 }}>{formatNumber(item.volume)}</span>
-                <span style={{ color: palette.muted, marginLeft: "auto" }}>{formatShare(item.shareRate)}</span>
+                <span style={{ color: palette.muted }}>{item.label}</span>
+                <span
+                  style={{
+                    fontWeight: 600,
+                    fontVariantNumeric: "tabular-nums",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {formatNumber(item.volume)}
+                </span>
+                <span style={{ color: palette.muted, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
+                  {formatShare(item.shareRate)}
+                </span>
               </div>
             ))}
           </div>
@@ -152,8 +173,9 @@ export function MachineSortingPieChart({ data }: Props) {
       style={{
         display: "grid",
         gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-        gap: 16,
+        gap: 20,
         minWidth: 0,
+        overflow: "hidden",
       }}
     >
       <StreamPie title="발송" slices={dispatch} />
