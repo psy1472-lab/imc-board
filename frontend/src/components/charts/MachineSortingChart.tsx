@@ -29,6 +29,7 @@ type Props = {
   data: MachineSortingTrendSeries;
   stream: MachineSortingStream;
   referenceDate?: string;
+  height?: number;
 };
 
 type ChartPoint = {
@@ -95,7 +96,7 @@ function buildChartData(
   });
 }
 
-export function MachineSortingChart({ data, stream, referenceDate }: Props) {
+export function MachineSortingChart({ data, stream, referenceDate, height = 320 }: Props) {
   const { palette } = useTheme();
   const colors = chartColors(palette);
   const streamData = data?.[stream];
@@ -116,7 +117,7 @@ export function MachineSortingChart({ data, stream, referenceDate }: Props) {
   }
 
   return (
-    <div className="imc-chart" style={{ height: 320, minWidth: 0, display: "flex", flexDirection: "column" }}>
+    <div className="imc-chart" style={{ height, minWidth: 0, display: "flex", flexDirection: "column" }}>
       <HourlyChartUnitHeader left="물량(개)" right="점유비(%)" />
       <div style={{ flex: 1, minHeight: 0 }}>
         <ResponsiveContainer width="100%" height="100%">

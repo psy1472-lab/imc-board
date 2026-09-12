@@ -106,6 +106,7 @@ export async function fetchDashboardSummary(
 ): Promise<DashboardSummary> {
   const res = await fetch(
     `${API_BASE}/api/dashboard/summary?date=${date}&compare=${compare}`,
+    { cache: "no-cache" },
   );
   if (!res.ok) {
     throw new Error("dashboard summary not found");
@@ -138,7 +139,7 @@ export async function fetchTransportAnalysis(date: string): Promise<TransportAna
 }
 
 export async function fetchEquipmentAnalysis(date: string): Promise<EquipmentAnalysis> {
-  const res = await fetch(`${API_BASE}/api/dashboard/equipment?date=${date}`);
+  const res = await fetch(`${API_BASE}/api/dashboard/equipment?date=${date}`, { cache: "no-cache" });
   if (!res.ok) {
     throw new Error("equipment analysis not found");
   }
@@ -160,6 +161,7 @@ export async function fetchDailyBriefing(
 ): Promise<DailyBriefing> {
   const res = await fetch(
     `${API_BASE}/api/dashboard/briefing?date=${date}&compare=${compare}&sections=${sections}`,
+    { cache: "no-cache" },
   );
   if (!res.ok) {
     throw new Error("daily briefing not found");

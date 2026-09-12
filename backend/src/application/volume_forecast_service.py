@@ -147,6 +147,7 @@ class VolumeForecastService:
             operation_periods=prior_ctx.get("operationPeriods"),
             historical_no_parcel_avg=prior_ctx.get("historicalNoParcelAvg"),
             volume_by_date=prior_ctx.get("volumeByDate"),
+            national_volume_by_date=prior_ctx.get("nationalVolumeByDate"),
         )
         if rule_result is None or rule_result.tomorrow_date != target_date:
             return None
@@ -271,6 +272,7 @@ class VolumeForecastService:
             operation_periods=forecast_ctx.get("operationPeriods"),
             historical_no_parcel_avg=forecast_ctx.get("historicalNoParcelAvg"),
             volume_by_date=forecast_ctx.get("volumeByDate"),
+            national_volume_by_date=forecast_ctx.get("nationalVolumeByDate"),
         )
 
     @staticmethod

@@ -1445,6 +1445,25 @@ class SqliteRepository:
                 raise
             return []
 
+    def _fetch_machine_sorting_for_dates(self, conn, dates: list[str]) -> list:
+        if not dates:
+            return []
+        placeholders = ",".join("?" * len(dates))
+        try:
+            return conn.execute(
+                f"""
+                SELECT report_date, stream, deck, volume, share_rate
+                FROM machine_sorting
+                WHERE report_date IN ({placeholders})
+                ORDER BY report_date, stream, deck
+                """,
+                dates,
+            ).fetchall()
+        except Exception as exc:  # noqa: BLE001
+            if "machine_sorting" not in str(exc):
+                raise
+            return []
+
     def _fetch_machine_sorting_history(self, conn, report_date: str) -> list:
         try:
             return conn.execute(
@@ -2537,6 +2556,7 @@ class SqliteRepository:
                 """,
                 (report_date,),
             ).fetchall()
+            machine_rows = self._fetch_machine_sorting_rows(conn, report_date)
 
         def compare_for(metric: str):
             row = comparisons.get(metric)
@@ -2693,6 +2713,7 @@ class SqliteRepository:
                 "ipsRate": [row["ips_rate"] for row in reversed(trend_dates)],
                 "rejectRate": [row["reject_rate"] for row in reversed(trend_dates)],
             },
+            "machineSorting": self._serialize_machine_sorting(machine_rows),
             "transport": {
                 "quarter": {
                     "actual": quota["quarter_actual"] if quota else None,

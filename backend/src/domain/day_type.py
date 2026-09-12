@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
 # 법정 공휴일 + 대체공휴일 (2025~2026, 운영 보고서 분석용)
 KR_REGULAR_HOLIDAYS: frozenset[date] = frozenset(
@@ -67,3 +67,35 @@ def resolve_day_type(report_date: date) -> str:
     if weekday == 6:
         return "sunday"
     return "weekday"
+
+
+def is_public_holiday(report_date: date) -> bool:
+    return report_date in KR_HOLIDAYS
+
+
+def is_post_holiday(report_date: date) -> bool:
+    """법정·임시 공휴일 직후 첫 평일인지 판정한다. 일반 월요일(일요 다음날)은 제외한다."""
+    if resolve_day_type(report_date) != "weekday":
+        return False
+    previous = report_date - timedelta(days=1)
+    if previous in KR_HOLIDAYS:
+        return True
+    if previous.weekday() == 6:
+        friday = report_date - timedelta(days=3)
+        saturday = report_date - timedelta(days=2)
+        return friday in KR_HOLIDAYS or saturday in KR_HOLIDAYS
+    return False
+
+
+def days_since_holiday(report_date: date, *, lookback: int = 14) -> int:
+    for offset in range(0, lookback + 1):
+        if report_date - timedelta(days=offset) in KR_HOLIDAYS:
+            return offset
+    return lookback + 1
+
+
+def days_until_holiday(report_date: date, *, lookahead: int = 14) -> int:
+    for offset in range(0, lookahead + 1):
+        if report_date + timedelta(days=offset) in KR_HOLIDAYS:
+            return offset
+    return lookahead + 1

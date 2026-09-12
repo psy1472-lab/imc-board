@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { HourlyStaffChart } from "../components/charts/HourlyStaffChart";
 import { HourlyVolumeChart } from "../components/charts/HourlyVolumeChart";
-import { KpiTrendChart } from "../components/charts/KpiTrendChart";
+import { MachineSortingPieChart } from "../components/charts/MachineSortingPieChart";
 import { Panel } from "../components/layout/Panel";
 import { PageState } from "../components/PageState";
 import { KpiCard } from "../components/kpi/KpiCard";
@@ -152,8 +152,8 @@ export default function SummaryDashboard() {
           <Panel title="설비(구분기) 현황">
             <EquipmentGaugePanel equipment={data.equipment} />
           </Panel>
-          <Panel title="주요 지표 추세 (최근 7업무일)">
-            <KpiTrendChart data={data.trend7d} />
+          <Panel title="기계구분율">
+            <MachineSortingPieChart data={data.machineSorting} />
           </Panel>
         </div>
         <Panel title="안전 점검 현황">

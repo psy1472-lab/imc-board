@@ -16,3 +16,4 @@ backend/data/models/*.pkl
 
 .vercel/
 .env.local
+.env.supabase.local

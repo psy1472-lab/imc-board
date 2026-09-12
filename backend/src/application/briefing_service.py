@@ -456,6 +456,7 @@ class BriefingService:
             absolute_critical=15,
             invert_absolute=True,
         )
+        deck_items = self._build_machine_sorting_deck_items(equipment)
 
         items = [
             {
@@ -470,6 +471,7 @@ class BriefingService:
                 "unit": "%",
                 **sorting_assessment,
             },
+            *deck_items,
             {
                 "label": "Reject율",
                 "value": summary.get("rejectRate"),
@@ -498,12 +500,15 @@ class BriefingService:
         ]
         if summary.get("ipsRate") is None:
             gaps.insert(0, "설비 가동 데이터 미수집")
+        if not deck_items:
+            gaps.insert(0, "기계구분 단별 점유비 데이터 없음")
         assessment = self._section_assessment(
             overall_status,
             "설비",
             ips_assessment,
             sorting_assessment,
             reject_assessment,
+            *deck_items,
         )
         return {
             "title": "설비",
@@ -710,6 +715,114 @@ class BriefingService:
             suffix = "입니다." if "유사" in segments[0] else "했습니다."
             return segments[0] + suffix
         return ", ".join(segments[:-1]) + ", " + segments[-1] + "했습니다."
+
+    _COMPARE_SKIP = frozenset(
+        {
+            "비교 가능한 당일 데이터가 없습니다.",
+            "비교 기준이 충분하지 않습니다.",
+        }
+    )
+
+    def _machine_sorting_share(self, rows: list | None, deck: int) -> float | None:
+        for row in rows or []:
+            if int(row.get("deck") or 0) != deck:
+                continue
+            value = row.get("shareRate")
+            if value is None:
+                return None
+            return round(float(value), 1)
+        return None
+
+    def _machine_sorting_share_benchmarks(self, equipment: dict, stream: str, deck: int) -> dict:
+        current_date = (equipment.get("meta") or {}).get("reportDate")
+        series = ((equipment.get("machineSortingTrends") or {}).get("30d") or {})
+        values = ((series.get(stream) or {}).get(f"deck{deck}Share") or [])
+        dates = series.get("reportDates") or []
+        prior: list[tuple[str, float]] = []
+        for report_dt, value in zip(dates, values):
+            if current_date and report_dt == current_date:
+                continue
+            if value is None:
+                continue
+            prior.append((report_dt, float(value)))
+
+        prev_day = prior[-1][1] if prior else None
+        last7 = [value for _, value in prior[-7:]]
+        avg7 = round(sum(last7) / len(last7), 1) if last7 else None
+        same_weekday = None
+        if current_date:
+            target_weekday = date.fromisoformat(current_date).weekday()
+            same_vals = [
+                value
+                for report_dt, value in prior
+                if date.fromisoformat(report_dt).weekday() == target_weekday
+            ]
+            if same_vals:
+                same_weekday = round(sum(same_vals) / len(same_vals), 1)
+
+        return {
+            "prevDay": {"share": round(prev_day, 1) if prev_day is not None else None},
+            "avg7d": {"share": avg7},
+            "sameWeekday": {"share": same_weekday},
+        }
+
+    def _build_machine_sorting_deck_items(self, equipment: dict) -> list[dict]:
+        current = equipment.get("machineSorting") or {}
+        items: list[dict] = []
+        for deck in (1, 2, 3):
+            dispatch = self._machine_sorting_share(current.get("dispatch"), deck)
+            arrival = self._machine_sorting_share(current.get("arrival"), deck)
+            if dispatch is None and arrival is None:
+                continue
+
+            dispatch_assessment = self._assess_trend_metric_multi(
+                dispatch,
+                self._machine_sorting_share_benchmarks(equipment, "dispatch", deck),
+                "share",
+                higher_is_better=None,
+                moderate_drop=10,
+                severe_drop=20,
+            )
+            arrival_assessment = self._assess_trend_metric_multi(
+                arrival,
+                self._machine_sorting_share_benchmarks(equipment, "arrival", deck),
+                "share",
+                higher_is_better=None,
+                moderate_drop=10,
+                severe_drop=20,
+            )
+            status = self._worst_status(
+                dispatch_assessment.get("status") or "UNKNOWN",
+                arrival_assessment.get("status") or "UNKNOWN",
+            )
+            mix = []
+            if dispatch is not None:
+                mix.append(f"발송 {dispatch:.1f}%")
+            if arrival is not None:
+                mix.append(f"도착 {arrival:.1f}%")
+            text_parts = [" · ".join(mix)]
+            dispatch_compare = dispatch_assessment.get("text")
+            if dispatch is not None and dispatch_compare not in self._COMPARE_SKIP:
+                text_parts.append(f"발송 {dispatch_compare}")
+            arrival_compare = arrival_assessment.get("text")
+            if arrival is not None and arrival_compare not in self._COMPARE_SKIP:
+                text_parts.append(f"도착 {arrival_compare}")
+            items.append(
+                {
+                    "label": f"기계구분 {deck}단",
+                    "value": dispatch if dispatch is not None else arrival,
+                    "unit": "%",
+                    "status": status,
+                    "statusLabel": STATUS_LABELS.get(status, STATUS_LABELS["UNKNOWN"]),
+                    "text": " · ".join(text_parts),
+                    "assessment": JUDGMENT_PHRASES.get(status, JUDGMENT_PHRASES["UNKNOWN"]),
+                    "trend": dispatch_assessment.get("trend") or arrival_assessment.get("trend"),
+                    "trendPercent": dispatch_assessment.get("trendPercent")
+                    if dispatch is not None
+                    else arrival_assessment.get("trendPercent"),
+                }
+            )
+        return items
 
     def _assess_trend_metric_multi(
         self,

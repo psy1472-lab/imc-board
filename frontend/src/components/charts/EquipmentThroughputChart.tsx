@@ -3,6 +3,7 @@ import {
   CartesianGrid,
   ComposedChart,
   Legend,
+  Line,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -10,6 +11,7 @@ import {
 } from "recharts";
 import type { EquipmentTrendSeries } from "../../types/equipmentAnalysis";
 import { useTheme } from "../../context/ThemeContext";
+import { chartColors } from "../../lib/chartColors";
 import { formatNumber } from "../../styles/theme";
 import {
   buildEquipmentTrendChartData,
@@ -24,6 +26,7 @@ type Props = {
 
 export function EquipmentThroughputChart({ data, referenceDate }: Props) {
   const { palette } = useTheme();
+  const colors = chartColors(palette);
   const isWeekdayMode = data.mode === "weekday";
   const chartData = buildEquipmentTrendChartData(data, referenceDate);
 
@@ -51,8 +54,22 @@ export function EquipmentThroughputChart({ data, referenceDate }: Props) {
             formatter={(value, name) => [formatNumber(value as number), String(name)]}
           />
           <Legend />
-          <Bar dataKey="avgThroughput" name="시간당 평균" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={28} />
-          <Bar dataKey="peakThroughput" name="시간당 피크" fill="#8b5cf6" radius={[4, 4, 0, 0]} maxBarSize={28} />
+          <Bar
+            dataKey="peakThroughput"
+            name="시간당 피크"
+            fill={colors.primary}
+            radius={[4, 4, 0, 0]}
+            maxBarSize={28}
+          />
+          <Line
+            type="monotone"
+            dataKey="avgThroughput"
+            name="시간당 평균"
+            stroke={colors.tertiary}
+            strokeWidth={2}
+            dot={{ r: 3, fill: colors.tertiary, strokeWidth: 0 }}
+            connectNulls
+          />
         </ComposedChart>
       </ResponsiveContainer>
     </div>

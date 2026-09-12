@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, timedelta
 
-from domain.day_type import resolve_day_type
+from domain.day_type import is_post_holiday, resolve_day_type
 from domain.operation_period import apply_operation_period_volume_adjustment
 
 WEEKDAY_LABELS = ["월", "화", "수", "목", "금", "토", "일"]
@@ -37,6 +37,13 @@ TREND_FACTOR_MAX = 1.12
 MOMENTUM_FACTOR_MIN = 0.92
 MOMENTUM_FACTOR_MAX = 1.08
 DRIFT_DAMPING = 0.5
+
+POST_HOLIDAY_LABEL = "휴일 다음날"
+POST_HOLIDAY_FACTOR_MIN = 0.92
+POST_HOLIDAY_FACTOR_MAX = 1.18
+POST_HOLIDAY_LOOKBACK_WEEKS = 52
+POST_HOLIDAY_MIN_SAMPLES = 2
+POST_HOLIDAY_BLEND_WEIGHT = 0.35
 
 
 @dataclass(frozen=True)
@@ -168,6 +175,71 @@ def _build_fallback_ensemble(
     return _weighted_average(parts)
 
 
+def estimate_post_holiday_factor(
+    target_day: date,
+    volume_by_date: dict[str, float] | None,
+) -> float | None:
+    if not is_post_holiday(target_day) or not volume_by_date:
+        return None
+    weekday = target_day.weekday()
+    post_values: list[float] = []
+    normal_values: list[float] = []
+    for weeks_back in range(1, POST_HOLIDAY_LOOKBACK_WEEKS + 1):
+        candidate = target_day - timedelta(weeks=weeks_back)
+        if candidate.weekday() != weekday:
+            continue
+        value = volume_by_date.get(candidate.isoformat())
+        if value is None or value <= 0:
+            continue
+        if is_post_holiday(candidate):
+            post_values.append(value)
+        elif resolve_day_type(candidate) == "weekday":
+            normal_values.append(value)
+    if len(post_values) < POST_HOLIDAY_MIN_SAMPLES or not normal_values:
+        return None
+    normal_mean = sum(normal_values) / len(normal_values)
+    if normal_mean <= 0:
+        return None
+    ratio = (sum(post_values) / len(post_values)) / normal_mean
+    return _clamp(ratio, POST_HOLIDAY_FACTOR_MIN, POST_HOLIDAY_FACTOR_MAX)
+
+
+def apply_post_holiday_adjustment(
+    volume: float,
+    target_day: date,
+    volume_by_date: dict[str, float] | None,
+) -> tuple[float, tuple[str, ...]]:
+    if not is_post_holiday(target_day):
+        return volume, ()
+    factor = estimate_post_holiday_factor(target_day, volume_by_date)
+    if factor is None:
+        post_values = _same_weekday_post_holiday_values(target_day, volume_by_date)
+        if len(post_values) < 1:
+            return volume, ()
+        reference = sum(post_values) / len(post_values)
+        adjusted = volume * (1.0 - POST_HOLIDAY_BLEND_WEIGHT) + reference * POST_HOLIDAY_BLEND_WEIGHT
+        return round(max(adjusted, 0.0), 1), (POST_HOLIDAY_LABEL,)
+    return round(max(volume * factor, 0.0), 1), (POST_HOLIDAY_LABEL,)
+
+
+def _same_weekday_post_holiday_values(
+    target_day: date,
+    volume_by_date: dict[str, float] | None,
+) -> list[float]:
+    if not volume_by_date:
+        return []
+    weekday = target_day.weekday()
+    values: list[float] = []
+    for weeks_back in range(1, POST_HOLIDAY_LOOKBACK_WEEKS + 1):
+        candidate = target_day - timedelta(weeks=weeks_back)
+        if candidate.weekday() != weekday or not is_post_holiday(candidate):
+            continue
+        value = volume_by_date.get(candidate.isoformat())
+        if value is not None and value > 0:
+            values.append(value)
+    return values
+
+
 def forecast_national_volume(
     *,
     target_day_type: str,
@@ -240,6 +312,7 @@ def forecast_next_day_volume(
     operation_periods: list[dict] | None = None,
     historical_no_parcel_avg: float | None = None,
     volume_by_date: dict[str, float] | None = None,
+    national_volume_by_date: dict[str, float] | None = None,
 ) -> VolumeForecastResult | None:
     report_day = date.fromisoformat(report_date)
     target = (
@@ -333,6 +406,37 @@ def forecast_next_day_volume(
         volume_by_date=volume_by_date,
         before_date=target,
     )
+    forecast_volume, holiday_labels = apply_post_holiday_adjustment(
+        forecast_volume,
+        target,
+        volume_by_date,
+    )
+    period_labels = period_labels + holiday_labels
+
+    national_forecast = forecast_national_volume(
+        target_day_type=resolved_day_type,
+        seasonal_naive_1w=national_seasonal_naive_1w,
+        seasonal_naive_4w=national_seasonal_naive_4w,
+        same_type_baseline=same_type_national_baseline,
+        same_type_avg_7d=same_type_national_avg_7d,
+        today_volume=today_national_volume,
+        today_type_avg_7d=today_type_national_avg_7d,
+    )
+    if national_forecast is not None:
+        national_forecast, national_period_labels = apply_operation_period_volume_adjustment(
+            national_forecast,
+            target,
+            operation_periods or [],
+            volume_by_date=national_volume_by_date,
+            before_date=target,
+            include_no_parcel=False,
+        )
+        national_forecast, national_holiday_labels = apply_post_holiday_adjustment(
+            national_forecast,
+            target,
+            national_volume_by_date or volume_by_date,
+        )
+        period_labels = tuple(dict.fromkeys(period_labels + national_period_labels + national_holiday_labels))
 
     seasonal_samples = same_type_sample_count or weekday_sample_count
     if seasonal_samples >= 4 and seasonal_naive_4w is not None and seasonal_naive_1w is not None:
@@ -373,15 +477,7 @@ def forecast_next_day_volume(
         seasonal_naive_4w=seasonal_naive_4w,
         forecast_method=method,
         operation_period_labels=period_labels,
-        forecast_national_volume=forecast_national_volume(
-            target_day_type=resolved_day_type,
-            seasonal_naive_1w=national_seasonal_naive_1w,
-            seasonal_naive_4w=national_seasonal_naive_4w,
-            same_type_baseline=same_type_national_baseline,
-            same_type_avg_7d=same_type_national_avg_7d,
-            today_volume=today_national_volume,
-            today_type_avg_7d=today_type_national_avg_7d,
-        ),
+        forecast_national_volume=national_forecast,
     )
 
 
@@ -441,19 +537,40 @@ def build_volume_forecast_text(result: VolumeForecastResult) -> str:
     if trend_notes:
         return (
             f"{lead} {method_note}({basis})와 {', '.join(trend_notes)}을 반영한 추정치입니다."
-            f"{_operation_period_suffix(result.operation_period_labels)}"
+            f"{format_forecast_adjustment_suffix(result.operation_period_labels)}"
         )
     return (
         f"{lead} {method_note}({basis})를 기반으로 산출한 추정치입니다."
-        f"{_operation_period_suffix(result.operation_period_labels)}"
+        f"{format_forecast_adjustment_suffix(result.operation_period_labels)}"
     )
 
 
-def _operation_period_suffix(labels: tuple[str, ...]) -> str:
+def format_forecast_adjustment_suffix(labels: tuple[str, ...]) -> str:
     if not labels:
         return ""
-    joined = ", ".join(labels)
-    return f" 등록된 운영 특이 일정({joined})을 반영했습니다."
+    calendar = [label for label in labels if label == POST_HOLIDAY_LABEL]
+    operations = [label for label in labels if label != POST_HOLIDAY_LABEL]
+    parts: list[str] = []
+    if operations:
+        parts.append(f"등록된 운영 특이 일정({', '.join(operations)})을 반영했습니다.")
+    if calendar:
+        parts.append("휴일 다음날 특성을 반영했습니다.")
+    return " " + " ".join(parts)
+
+
+def _accuracy_clause(forecast_volume: float, actual_volume: float, label: str) -> str:
+    diff = actual_volume - forecast_volume
+    diff_pct = abs(diff) / actual_volume * 100
+    direction = "높게" if diff < 0 else "낮게"
+    if diff_pct < 5:
+        return (
+            f"{label} 예측 {forecast_volume:,.1f}천개, 실제 {actual_volume:,.1f}천개로 "
+            f"오차 약 {diff_pct:.1f}%"
+        )
+    return (
+        f"{label} 예측 {forecast_volume:,.1f}천개, 실제 {actual_volume:,.1f}천개로 "
+        f"약 {diff_pct:.1f}% {direction} 예측"
+    )
 
 
 def build_forecast_accuracy_text(
@@ -461,21 +578,96 @@ def build_forecast_accuracy_text(
     actual_volume: float,
     *,
     forecast_date: str,
+    forecast_national_volume: float | None = None,
+    actual_national_volume: float | None = None,
+    source_label: str = "전일 예측",
 ) -> str:
     if actual_volume <= 0:
         return ""
-    diff = actual_volume - forecast_volume
-    diff_pct = abs(diff) / actual_volume * 100
-    direction = "높게" if diff < 0 else "낮게"
-    if diff_pct < 5:
-        return (
-            f"당일({forecast_date}) 전일 예측 {forecast_volume:,.1f}천개, 실제 {actual_volume:,.1f}천개로 "
-            f"오차 약 {diff_pct:.1f}% — 예측과 유사했습니다."
+    processing = _accuracy_clause(forecast_volume, actual_volume, "처리물량")
+    national = ""
+    if (
+        forecast_national_volume is not None
+        and actual_national_volume is not None
+        and actual_national_volume > 0
+    ):
+        national = "; " + _accuracy_clause(
+            forecast_national_volume,
+            actual_national_volume,
+            "전국접수물량",
         )
-    return (
-        f"당일({forecast_date}) 전일 예측 {forecast_volume:,.1f}천개, 실제 {actual_volume:,.1f}천개로 "
-        f"약 {diff_pct:.1f}% {direction} 예측되었습니다."
+    similar = abs(actual_volume - forecast_volume) / actual_volume * 100 < 5
+    ending = " — 예측과 유사했습니다." if similar and not national else "되었습니다."
+    if national and similar:
+        ending = "입니다."
+    return f"당일({forecast_date}) {source_label} {processing}{national}{ending}"
+
+
+def summarize_forecast_accuracy(rows: list[dict]) -> dict | None:
+    processing_errors: list[float] = []
+    national_errors: list[float] = []
+    weekday_errors: list[float] = []
+    holiday_errors: list[float] = []
+    for row in rows:
+        forecast = row.get("forecastVolume")
+        actual = row.get("actualVolume")
+        if forecast is None or actual in (None, 0):
+            continue
+        error = abs(forecast - actual) / actual * 100
+        processing_errors.append(error)
+        target = row.get("targetDate")
+        if target:
+            target_day = date.fromisoformat(target)
+            if is_post_holiday(target_day):
+                holiday_errors.append(error)
+            else:
+                weekday_errors.append(error)
+        national_forecast = row.get("forecastNationalVolume")
+        national_actual = row.get("actualNationalVolume")
+        if national_forecast is not None and national_actual not in (None, 0):
+            national_errors.append(abs(national_forecast - national_actual) / national_actual * 100)
+    if len(processing_errors) < 3:
+        return None
+    return {
+        "sampleCount": len(processing_errors),
+        "processingMape": round(sum(processing_errors) / len(processing_errors), 1),
+        "nationalMape": (
+            round(sum(national_errors) / len(national_errors), 1) if national_errors else None
+        ),
+        "nationalSampleCount": len(national_errors),
+        "weekdayMape": (
+            round(sum(weekday_errors) / len(weekday_errors), 1) if weekday_errors else None
+        ),
+        "postHolidayMape": (
+            round(sum(holiday_errors) / len(holiday_errors), 1) if holiday_errors else None
+        ),
+        "postHolidaySampleCount": len(holiday_errors),
+    }
+
+
+def build_forecast_accuracy_window_text(summary: dict | None) -> str:
+    if not summary:
+        return ""
+    text = (
+        f"최근 {summary['sampleCount']}일 저장 예측 기준 처리물량 MAPE 약 "
+        f"{summary['processingMape']:.1f}%"
     )
+    if summary.get("nationalMape") is not None:
+        text += (
+            f", 전국접수물량 MAPE 약 {summary['nationalMape']:.1f}%"
+            f"({summary['nationalSampleCount']}일)"
+        )
+    extras: list[str] = []
+    if summary.get("weekdayMape") is not None:
+        extras.append(f"일반일 {summary['weekdayMape']:.1f}%")
+    if summary.get("postHolidayMape") is not None and summary.get("postHolidaySampleCount", 0) > 0:
+        extras.append(
+            f"휴일 다음날 {summary['postHolidayMape']:.1f}%"
+            f"({summary['postHolidaySampleCount']}일)"
+        )
+    if extras:
+        text += f" — {', '.join(extras)}"
+    return text + "입니다."
 
 
 def estimate_staff_for_volume(

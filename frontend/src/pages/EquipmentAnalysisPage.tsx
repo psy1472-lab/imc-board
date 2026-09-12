@@ -274,52 +274,37 @@ export default function EquipmentAnalysisPage() {
       </section>
 
       <section style={{ display: "grid", gap: 16, marginBottom: 16 }}>
-        <div className="imc-analysis-2col">
-          <div style={panelStyle}>
-            <h3 style={{ margin: "0 0 12px" }}>공급·구분 현황</h3>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }}>
-              <div style={{ background: palette.panelAlt, borderRadius: 12, padding: 14 }}>
-                <div style={{ color: palette.muted, fontSize: 12 }}>총 공급수</div>
-                <div style={{ fontSize: 22, fontWeight: 700, marginTop: 8 }}>{formatNumber(data.summary.totalSupply)}</div>
-              </div>
-              <div style={{ background: palette.panelAlt, borderRadius: 12, padding: 14 }}>
-                <div style={{ color: palette.muted, fontSize: 12 }}>총 구분수</div>
-                <div style={{ fontSize: 22, fontWeight: 700, marginTop: 8 }}>{formatNumber(data.summary.totalSorted)}</div>
-              </div>
-            </div>
-          </div>
-          <div style={panelStyle}>
-            <div
+        <div style={panelStyle}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 12,
+              marginBottom: 12,
+            }}
+          >
+            <h3 style={{ margin: 0 }}>처리량 추세</h3>
+            <select
+              value={trendView}
+              onChange={(e) => setVolumeTrendView(e.target.value as typeof trendView)}
               style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                gap: 12,
-                marginBottom: 12,
+                padding: "8px 12px",
+                background: palette.inputBg,
+                color: palette.text,
+                border: `1px solid ${palette.border}`,
+                borderRadius: 8,
+                fontSize: 13,
               }}
             >
-              <h3 style={{ margin: 0 }}>처리량 추세</h3>
-              <select
-                value={trendView}
-                onChange={(e) => setVolumeTrendView(e.target.value as typeof trendView)}
-                style={{
-                  padding: "8px 12px",
-                  background: palette.inputBg,
-                  color: palette.text,
-                  border: `1px solid ${palette.border}`,
-                  borderRadius: 8,
-                  fontSize: 13,
-                }}
-              >
-                {TREND_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            {trendData ? <EquipmentThroughputChart data={trendData} referenceDate={data.meta.reportDate} /> : null}
+              {TREND_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
           </div>
+          {trendData ? <EquipmentThroughputChart data={trendData} referenceDate={data.meta.reportDate} /> : null}
         </div>
 
         <div style={panelStyle}>

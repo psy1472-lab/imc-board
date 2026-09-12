@@ -1,3 +1,5 @@
+import type { MachineSorting } from "./equipmentAnalysis";
+
 export type CompareInfo = {
   percent?: number | null;
   trend?: string;
@@ -61,6 +63,7 @@ export type DashboardSummary = {
     ipsRate: Array<number | null>;
     rejectRate: Array<number | null>;
   };
+  machineSorting?: MachineSorting;
   transport: {
     quarter: { actual?: number | null; standard?: number | null; complianceRate?: number | null };
     exchange: { actual?: number | null; standard?: number | null; complianceRate?: number | null };

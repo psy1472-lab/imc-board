@@ -8,7 +8,12 @@ from typing import Any, Protocol
 
 import numpy as np
 
-from domain.day_type import resolve_day_type
+from domain.day_type import (
+    days_since_holiday,
+    days_until_holiday,
+    is_post_holiday,
+    resolve_day_type,
+)
 from domain.forecast_router import is_weekday_target
 from infrastructure.config import ml_inference_mode_fast
 from domain.operation_period import (
@@ -22,7 +27,10 @@ from domain.volume_forecast import (
     DAY_TYPE_LABELS,
     WEEKDAY_LABELS,
     _format_forecast_volume_lead,
+    apply_post_holiday_adjustment,
+    forecast_national_volume,
     forecast_target_note_for,
+    format_forecast_adjustment_suffix,
     resolve_forecast_target_date,
 )
 
@@ -45,6 +53,9 @@ FEATURE_NAMES = [
     "special_communication_period",
     "no_parcel_day_index",
     "days_until_period_end",
+    "is_post_holiday",
+    "days_since_holiday",
+    "days_until_holiday",
 ]
 
 MIN_TRAINING_SAMPLES = 30
@@ -239,6 +250,9 @@ def build_feature_vector(
         float(special_period),
         no_parcel_index,
         days_until_end,
+        1.0 if is_post_holiday(target_day) else 0.0,
+        float(days_since_holiday(target_day)),
+        float(days_until_holiday(target_day)),
     ]
 
 
@@ -671,7 +685,31 @@ def predict_next_volume(
         return None
 
     baseline_4w = seasonal_naive_4w or _baseline_same_weekday_4w(volume_by_date, target_day)
-    forecast_national_volume = _baseline_same_weekday_4w(national_by_date, target_day)
+    national_lag_1w = _same_weekday_lag(national_by_date, target_day, 1)
+    national_4w = _baseline_same_weekday_4w(national_by_date, target_day)
+    national_baseline = _rolling_same_weekday_mean(national_by_date, target_day, 8) or national_4w
+    national_forecast = forecast_national_volume(
+        target_day_type=resolve_day_type(target_day),
+        seasonal_naive_1w=national_lag_1w if national_lag_1w > 0 else None,
+        seasonal_naive_4w=national_4w,
+        same_type_baseline=national_baseline if national_baseline else None,
+        same_type_avg_7d=national_4w,
+        today_volume=_to_thousand(anchor_row.national_volume),
+    )
+    if national_forecast is not None:
+        national_forecast, _ = apply_operation_period_volume_adjustment(
+            national_forecast,
+            target_day,
+            operation_periods or [],
+            volume_by_date=national_by_date,
+            before_date=target_day,
+            include_no_parcel=False,
+        )
+        national_forecast, _ = apply_post_holiday_adjustment(
+            national_forecast,
+            target_day,
+            national_by_date,
+        )
     feature_vector = build_feature_vector(
         anchor_row.report_date,
         target_day,
@@ -733,6 +771,12 @@ def predict_next_volume(
                 volume_by_date=volume_by_date,
                 before_date=target_day,
             )
+            prediction, holiday_labels = apply_post_holiday_adjustment(
+                prediction,
+                target_day,
+                volume_by_date,
+            )
+            period_labels = period_labels + holiday_labels
             target_idx = target_day.weekday()
             return VolumeMlForecastResult(
                 report_date=report_date,
@@ -752,7 +796,7 @@ def predict_next_volume(
                 seasonal_naive_4w=baseline_4w,
                 ml_volume=ml_raw,
                 bias_adjustment=bias,
-                forecast_national_volume=forecast_national_volume,
+                forecast_national_volume=national_forecast,
             )
 
         ml_weight = _tune_blend_weight(
@@ -775,6 +819,12 @@ def predict_next_volume(
         volume_by_date=volume_by_date,
         before_date=target_day,
     )
+    prediction, holiday_labels = apply_post_holiday_adjustment(
+        prediction,
+        target_day,
+        volume_by_date,
+    )
+    period_labels = period_labels + holiday_labels
 
     target_idx = target_day.weekday()
     return VolumeMlForecastResult(
@@ -795,7 +845,7 @@ def predict_next_volume(
         seasonal_naive_4w=baseline_4w,
         ml_volume=ml_raw,
         bias_adjustment=bias,
-        forecast_national_volume=forecast_national_volume,
+        forecast_national_volume=national_forecast,
     )
 
 
@@ -834,12 +884,5 @@ def build_ml_volume_forecast_text(result: VolumeMlForecastResult) -> str:
         bias_note = f", 최근 편향 보정 {result.bias_adjustment:+.1f}천"
     return (
         f"{lead}{model_part}{blend_note}{bias_note} 기반 추정치입니다."
-        f"{_operation_period_suffix(result.operation_period_labels)}"
+        f"{format_forecast_adjustment_suffix(result.operation_period_labels)}"
     )
-
-
-def _operation_period_suffix(labels: tuple[str, ...]) -> str:
-    if not labels:
-        return ""
-    joined = ", ".join(labels)
-    return f" 등록된 운영 특이 일정({joined})을 반영했습니다."
