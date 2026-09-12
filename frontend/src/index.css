@@ -86,7 +86,25 @@ select, input {
   width: var(--imc-sidebar-width);
   flex-shrink: 0;
   padding: 20px;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  overflow: hidden;
   transition: width 0.2s ease, padding 0.2s ease;
+}
+
+.imc-sidebar-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.imc-sidebar-guide {
+  flex-shrink: 0;
+  padding-top: 12px;
+  margin-top: 8px;
 }
 
 .imc-sidebar--collapsed {
@@ -106,9 +124,23 @@ select, input {
 
 .imc-sidebar--collapsed .imc-sidebar-label,
 .imc-sidebar--collapsed .imc-sidebar-filters,
+.imc-sidebar--collapsed .imc-sidebar-guide .imc-nav-text,
 .imc-sidebar--collapsed .imc-nav-text,
 .imc-sidebar--collapsed .imc-admin-logout {
   display: none;
+}
+
+.imc-guide-metric {
+  display: grid;
+  grid-template-columns: minmax(120px, 180px) 1fr;
+  gap: 10px;
+  align-items: start;
+}
+
+@media (max-width: 768px) {
+  .imc-guide-metric {
+    grid-template-columns: 1fr;
+  }
 }
 
 .imc-main {

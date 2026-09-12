@@ -13,6 +13,7 @@ import TransportAnalysisPage from "./pages/TransportAnalysisPage";
 import StaffingAnalysisPage from "./pages/StaffingAnalysisPage";
 import SummaryDashboard from "./pages/SummaryDashboard";
 import VolumeAnalysisPage from "./pages/VolumeAnalysisPage";
+import UserGuidePage from "./pages/UserGuidePage";
 import "./index.css";
 
 export default function App() {
@@ -30,6 +31,7 @@ export default function App() {
                 <Route path="equipment" element={<EquipmentAnalysisPage />} />
                 <Route path="safety" element={<SafetyAnalysisPage />} />
                 <Route path="briefing" element={<BriefingPage />} />
+                <Route path="guide" element={<UserGuidePage />} />
                 <Route
                   path="reports"
                   element={

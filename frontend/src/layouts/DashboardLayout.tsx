@@ -6,7 +6,7 @@ import { CommunicationStatusBadge } from "../components/header/CommunicationStat
 import { OperationPeriodBadge } from "../components/header/OperationPeriodBadge";
 import { ThemeToggle } from "../components/header/ThemeToggle";
 import { ReportDateCalendar } from "../components/filters/ReportDateCalendar";
-import { NAV_ITEMS } from "../config/navigation";
+import { GUIDE_NAV_ITEM, NAV_ITEMS } from "../config/navigation";
 import { useAdminAuth } from "../context/AdminAuthContext";
 import { useDashboardFilters } from "../context/DashboardFilterContext";
 import { useTheme } from "../context/ThemeContext";
@@ -122,6 +122,7 @@ export function DashboardLayout() {
             {sidebarCollapsed ? "»" : "«"}
           </button>
         </div>
+        <div className="imc-sidebar-body">
         {NAV_ITEMS.map((item) => (
           <div key={item.path}>
             <NavLink
@@ -193,6 +194,24 @@ export function DashboardLayout() {
               {option.label}
             </label>
           ))}
+        </div>
+        </div>
+        <div className="imc-sidebar-guide" style={{ borderTop: `1px solid ${palette.border}` }}>
+          <NavLink
+            to={GUIDE_NAV_ITEM.path}
+            title={GUIDE_NAV_ITEM.label}
+            style={({ isActive }) => ({
+              display: "block",
+              padding: "10px 12px",
+              borderRadius: 8,
+              textDecoration: "none",
+              background: isActive ? palette.panel : "transparent",
+              color: isActive ? palette.text : palette.muted,
+              overflow: "hidden",
+            })}
+          >
+            <span className="imc-nav-text">{GUIDE_NAV_ITEM.label}</span>
+          </NavLink>
         </div>
       </aside>
 
