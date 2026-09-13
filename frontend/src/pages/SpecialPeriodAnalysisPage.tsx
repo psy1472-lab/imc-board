@@ -352,7 +352,7 @@ export default function SpecialPeriodAnalysisPage() {
           data={chartRows}
           series={[
             { key: "totalCurrent", label: "올해", color: colors.primary },
-            { key: "totalPrior", label: "전년", color: colors.muted, dashed: true },
+            { key: "totalPrior", label: "전년", color: colors.warning, dashed: true },
           ]}
           unitLabel="물량(천개)"
           tooltipUnit="천"
@@ -370,8 +370,8 @@ export default function SpecialPeriodAnalysisPage() {
           series={[
             { key: "dispatchCurrent", label: "올해 발송", color: colors.tertiary },
             { key: "dispatchPrior", label: "전년 발송", color: colors.tertiary, dashed: true },
-            { key: "arrivalCurrent", label: "올해 도착", color: colors.quaternary },
-            { key: "arrivalPrior", label: "전년 도착", color: colors.quaternary, dashed: true },
+            { key: "arrivalCurrent", label: "올해 도착", color: colors.primary },
+            { key: "arrivalPrior", label: "전년 도착", color: colors.primary, dashed: true },
           ]}
           unitLabel="물량(천개)"
           tooltipUnit="천"
@@ -385,7 +385,7 @@ export default function SpecialPeriodAnalysisPage() {
           data={chartRows}
           series={[
             { key: "quotaActualCurrent", label: "올해 실제", color: colors.primary },
-            { key: "quotaActualPrior", label: "전년 실제", color: colors.primary, dashed: true },
+            { key: "quotaActualPrior", label: "전년 실제", color: colors.warning, dashed: true },
           ]}
           unitLabel="대수(대)"
           tooltipUnit=""

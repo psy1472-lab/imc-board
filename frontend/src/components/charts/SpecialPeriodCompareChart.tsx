@@ -57,6 +57,8 @@ export function SpecialPeriodCompareChart({
 }: Props) {
   const { palette } = useTheme();
   const hasValue = data.some((row) => series.some((item) => row[item.key] != null));
+  const xInterval = data.length <= 12 ? 0 : Math.max(1, Math.ceil(data.length / 10) - 1);
+  const rotateTicks = xInterval === 0 && data.length > 8;
 
   if (!hasValue) {
     return (
@@ -83,11 +85,11 @@ export function SpecialPeriodCompareChart({
             <XAxis
               dataKey="label"
               stroke={palette.chartText}
-              interval={0}
-              angle={-40}
-              textAnchor="end"
-              height={56}
-              tick={{ fill: palette.chartText, fontSize: 10 }}
+              interval={xInterval}
+              angle={rotateTicks ? -40 : 0}
+              textAnchor={rotateTicks ? "end" : "middle"}
+              height={rotateTicks ? 56 : 28}
+              tick={{ fill: palette.chartText, fontSize: 11 }}
               tickFormatter={formatTick}
             />
             <YAxis
@@ -130,9 +132,14 @@ export function SpecialPeriodCompareChart({
                 dataKey={item.key}
                 name={item.label}
                 stroke={item.color}
-                strokeWidth={item.dashed ? 2 : 2.5}
-                strokeDasharray={item.dashed ? "6 4" : undefined}
-                dot={{ r: 3 }}
+                strokeWidth={item.dashed ? 2.5 : 2.5}
+                strokeDasharray={item.dashed ? "7 4" : undefined}
+                dot={{
+                  r: item.dashed ? 3 : 3,
+                  fill: item.dashed ? palette.panel : item.color,
+                  stroke: item.color,
+                  strokeWidth: 1.5,
+                }}
                 connectNulls={false}
               />
             ))}

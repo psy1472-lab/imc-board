@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -26,6 +27,8 @@ from domain.transport_quota import (
 from domain.volume_forecast import forecast_target_note_for, resolve_forecast_target_date
 from domain.entities import ParsedReport
 from domain.hour_slots import HOUR_SLOTS, format_hour_label, normalize_hour_slot
+
+_PDF_DATE_STAMP_RE = re.compile(r"(?<!\d)(\d{2}\.\d{2}\.\d{2})(?!\d)")
 
 
 def _resolve_migrations_dir() -> Path:
@@ -1605,6 +1608,24 @@ class SqliteRepository:
 
         return resolve_upload_dir()
 
+    def _upload_pdfs_by_stamp(self) -> dict[str, Path]:
+        cached = getattr(self, "_upload_pdf_stamp_index", None)
+        if cached is not None:
+            return cached
+        index: dict[str, Path] = {}
+        uploads = self._uploads_dir()
+        if uploads.exists():
+            for path in uploads.glob("*.pdf"):
+                match = _PDF_DATE_STAMP_RE.search(path.name)
+                if not match:
+                    continue
+                stamp = match.group(1)
+                existing = index.get(stamp)
+                if existing is None or path.name.startswith("IMC_"):
+                    index[stamp] = path
+        self._upload_pdf_stamp_index = index
+        return index
+
     def _resolve_report_pdf(self, report_date: str) -> Path | None:
         file_path = self.get_report_file_path(report_date)
         candidates: list[Path] = []
@@ -1613,7 +1634,11 @@ class SqliteRepository:
             candidates.append(stored)
             candidates.append(self._uploads_dir() / stored.name)
         report_day = date.fromisoformat(report_date)
-        candidates.append(self._uploads_dir() / f"IMC_{report_day.strftime('%y.%m.%d')}.pdf")
+        stamp = report_day.strftime("%y.%m.%d")
+        candidates.append(self._uploads_dir() / f"IMC_{stamp}.pdf")
+        indexed = self._upload_pdfs_by_stamp().get(stamp)
+        if indexed:
+            candidates.append(indexed)
         seen: set[str] = set()
         for candidate in candidates:
             key = str(candidate)
@@ -2590,6 +2615,18 @@ class SqliteRepository:
             windows = [expand_period_window(current)]
             if prior:
                 windows.append(expand_period_window(prior))
+            report_dates: list[str] = []
+            with self._connect() as conn:
+                for window_start, window_end in windows:
+                    rows = conn.execute(
+                        """
+                        SELECT report_date FROM daily_summary
+                        WHERE report_date >= ? AND report_date <= ?
+                        """,
+                        (window_start.isoformat(), window_end.isoformat()),
+                    ).fetchall()
+                    report_dates.extend(row["report_date"] for row in rows)
+            self._ensure_machine_sorting_for_dates(report_dates)
             with self._connect() as conn:
                 for window_start, window_end in windows:
                     daily_by_date.update(self._load_special_period_daily(conn, window_start, window_end))
