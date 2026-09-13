@@ -257,6 +257,17 @@ def volume_analysis(date: str = Query(..., description="YYYY-MM-DD")):
     return payload
 
 
+@app.get("/api/dashboard/special-period")
+def special_period_analysis(
+    periodId: int | None = Query(None),
+    date: str | None = Query(None, description="YYYY-MM-DD"),
+):
+    payload = repository.get_special_period_analysis(periodId, date)
+    if payload.get("notFound"):
+        raise HTTPException(status_code=404, detail="operation period not found")
+    return payload
+
+
 @app.get("/api/dashboard/staffing")
 def staffing_analysis(date: str = Query(..., description="YYYY-MM-DD")):
     payload = repository.get_staffing_analysis(date)

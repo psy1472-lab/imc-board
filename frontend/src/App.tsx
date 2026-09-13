@@ -13,6 +13,7 @@ import TransportAnalysisPage from "./pages/TransportAnalysisPage";
 import StaffingAnalysisPage from "./pages/StaffingAnalysisPage";
 import SummaryDashboard from "./pages/SummaryDashboard";
 import VolumeAnalysisPage from "./pages/VolumeAnalysisPage";
+import SpecialPeriodAnalysisPage from "./pages/SpecialPeriodAnalysisPage";
 import UserGuidePage from "./pages/UserGuidePage";
 import "./index.css";
 
@@ -26,6 +27,7 @@ export default function App() {
               <Route element={<DashboardLayout />}>
                 <Route index element={<SummaryDashboard />} />
                 <Route path="volume" element={<VolumeAnalysisPage />} />
+                <Route path="special-period" element={<SpecialPeriodAnalysisPage />} />
                 <Route path="staffing" element={<StaffingAnalysisPage />} />
                 <Route path="transport" element={<TransportAnalysisPage />} />
                 <Route path="equipment" element={<EquipmentAnalysisPage />} />

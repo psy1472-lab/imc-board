@@ -8,6 +8,7 @@ export type NavItem = {
 export const NAV_ITEMS: NavItem[] = [
   { label: "종합상황판", path: "/", ready: true },
   { label: "물량·소통 분석", path: "/volume", ready: true },
+  { label: "특별소통기간분석", path: "/special-period", ready: true },
   { label: "인력·생산성 분석", path: "/staffing", ready: true },
   { label: "운송 관제", path: "/transport", ready: true },
   { label: "설비·구분기 분석", path: "/equipment", ready: true },

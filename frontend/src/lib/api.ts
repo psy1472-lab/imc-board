@@ -13,6 +13,7 @@ import type {
 } from "../types/reports";
 import type { SystemStatus, ThresholdConfig } from "../types/system";
 import type { OperationPeriod, OperationPeriodType } from "../types/operationPeriod";
+import type { SpecialPeriodAnalysis } from "../types/specialPeriodAnalysis";
 import { adminAuthHeaders } from "./adminToken";
 
 const API_BASE = (import.meta.env.VITE_API_BASE ?? "").replace(/\/$/, "");
@@ -118,6 +119,21 @@ export async function fetchVolumeAnalysis(date: string): Promise<VolumeAnalysis>
   const res = await fetch(`${API_BASE}/api/dashboard/volume?date=${date}`);
   if (!res.ok) {
     throw new Error("volume analysis not found");
+  }
+  return res.json();
+}
+
+export async function fetchSpecialPeriodAnalysis(params: {
+  periodId?: number | null;
+  date?: string | null;
+}): Promise<SpecialPeriodAnalysis> {
+  const query = new URLSearchParams();
+  if (params.periodId != null) query.set("periodId", String(params.periodId));
+  if (params.date) query.set("date", params.date);
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  const res = await apiFetch(`/api/dashboard/special-period${suffix}`);
+  if (!res.ok) {
+    throw new Error(await readApiError(res, "특별소통기간 분석을 불러오지 못했습니다."));
   }
   return res.json();
 }

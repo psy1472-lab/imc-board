@@ -8,9 +8,13 @@ from pathlib import Path
 
 from domain.day_type import resolve_day_type
 from domain.operation_period import (
+    build_special_period_analysis,
     compute_historical_no_parcel_avg,
+    expand_period_window,
     get_operation_periods_for_date,
+    match_prior_year_period,
     operation_period_labels,
+    select_special_period,
 )
 from domain.transport_quota import (
     is_arrival_after_23,
@@ -2499,6 +2503,102 @@ class SqliteRepository:
             "note": row["note"],
             "createdAt": row["created_at"],
         }
+
+    def _load_special_period_daily(self, conn: sqlite3.Connection, start: date, end: date) -> dict[str, dict]:
+        start_s = start.isoformat()
+        end_s = end.isoformat()
+        volume_rows = conn.execute(
+            """
+            SELECT report_date, total_volume, dispatch_volume, arrival_volume
+            FROM daily_summary
+            WHERE report_date >= ? AND report_date <= ?
+            ORDER BY report_date
+            """,
+            (start_s, end_s),
+        ).fetchall()
+        quota_rows = conn.execute(
+            """
+            SELECT report_date, quarter_actual, quarter_standard
+            FROM quota_exchange
+            WHERE report_date >= ? AND report_date <= ?
+            ORDER BY report_date
+            """,
+            (start_s, end_s),
+        ).fetchall()
+        dates: list[str] = []
+        current = start
+        while current <= end:
+            dates.append(current.isoformat())
+            current += timedelta(days=1)
+        machine_rows = self._fetch_machine_sorting_for_dates(conn, dates)
+        grouped_machine = self._group_machine_sorting_history(machine_rows)
+        volume_by = {row["report_date"]: row for row in volume_rows}
+        quota_by = {row["report_date"]: row for row in quota_rows}
+
+        result: dict[str, dict] = {}
+        for report_dt in dates:
+            volume_row = volume_by.get(report_dt)
+            quota_row = quota_by.get(report_dt)
+            machine_day = grouped_machine.get(report_dt, {})
+            if not volume_row and not quota_row and not machine_day:
+                continue
+            machine_sorting: dict[str, dict] = {}
+            for stream in ("dispatch", "arrival"):
+                decks: dict[int, dict] = {}
+                for deck in (1, 2, 3):
+                    item = machine_day.get(stream, {}).get(deck) or {}
+                    raw_volume = item.get("volume")
+                    share = item.get("shareRate")
+                    if raw_volume is None and share is None:
+                        continue
+                    decks[deck] = {
+                        "volume": self._to_thousand(raw_volume) if raw_volume is not None else None,
+                        "share": share,
+                    }
+                if decks:
+                    machine_sorting[stream] = decks
+            actual = quota_row["quarter_actual"] if quota_row else None
+            standard = quota_row["quarter_standard"] if quota_row else None
+            result[report_dt] = {
+                "totalVolume": self._to_thousand(volume_row["total_volume"])
+                if volume_row and volume_row["total_volume"] is not None
+                else None,
+                "dispatchVolume": self._to_thousand(volume_row["dispatch_volume"])
+                if volume_row and volume_row["dispatch_volume"] is not None
+                else None,
+                "arrivalVolume": self._to_thousand(volume_row["arrival_volume"])
+                if volume_row and volume_row["arrival_volume"] is not None
+                else None,
+                "quotaActual": actual,
+                "quotaStandard": standard,
+                "quotaCompliance": self._compliance_rate(actual, standard),
+                "machineSorting": machine_sorting,
+            }
+        return result
+
+    def get_special_period_analysis(
+        self,
+        period_id: int | None = None,
+        reference_date: str | None = None,
+    ) -> dict:
+        periods = self.list_operation_periods()
+        ref = date.fromisoformat(reference_date) if reference_date else None
+        current = select_special_period(periods, period_id=period_id, reference_date=ref)
+        daily_by_date: dict[str, dict] = {}
+        if current:
+            prior = match_prior_year_period(current, periods)
+            windows = [expand_period_window(current)]
+            if prior:
+                windows.append(expand_period_window(prior))
+            with self._connect() as conn:
+                for window_start, window_end in windows:
+                    daily_by_date.update(self._load_special_period_daily(conn, window_start, window_end))
+        return build_special_period_analysis(
+            periods,
+            daily_by_date,
+            period_id=period_id,
+            reference_date=ref,
+        )
 
     def get_dashboard_summary(self, report_date: str, compare_basis: str = "prev_day") -> dict:
         with self._connect() as conn:
