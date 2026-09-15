@@ -38,7 +38,7 @@ const SCREENS = [
     path: "/equipment",
     title: "설비·구분기 분석",
     purpose: "구분기 품질과 처리량 추세를 봅니다.",
-    look: "IPS(목표 대비), 구분율, Reject율, 숏컷율, 시간당 평균/피크, 미판독, 기계구분 1·2·3단.",
+    look: "IPS(목표 대비), 구분율, Reject율, 숏컷율, 시간당 평균/피크, 미판독(품질 추세 오른쪽 축 막대), 기계구분 1·2·3단.",
   },
   {
     path: "/safety",
