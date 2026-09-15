@@ -293,6 +293,30 @@ def test_parse_quota_row_extended_format():
     assert exchange_difference == -22
 
 
+def test_parse_quota_row_six_columns_does_not_add_standard_to_total():
+    from infrastructure.pdf.extractors.operations import QuotaExchangeExtractor
+
+    text = (
+        "교환 및 수지 쿼 터 준 수 현 황\n"
+        "②사전협의 ③도착 ④초과 ⑦총 하차대수\n"
+        "구분 ①기준대수 ⑤제주D+2 ⑥기타(조달센터 등)\n"
+        "추가 소계 (③-①-②) (③+⑤+⑥)\n"
+        "쿼터 110 112 2 0 1 113\n"
+        "교환 128 3 120 -11\n"
+        "배분 및 교환 마지막 운송편 발송 현황\n"
+    )
+    extractor = QuotaExchangeExtractor()
+    standard, actual, difference = extractor._parse_quota_row(text, "쿼터")
+    assert standard == 110
+    assert actual == 112
+    assert difference == 2
+
+    exchange_standard, exchange_actual, exchange_difference = extractor._parse_quota_row(text, "교환")
+    assert exchange_standard == 128
+    assert exchange_actual == 120
+    assert exchange_difference == -11
+
+
 def test_parse_quota_row_spaced_header_and_seven_columns():
     from infrastructure.pdf.extractors.operations import QuotaExchangeExtractor
 
