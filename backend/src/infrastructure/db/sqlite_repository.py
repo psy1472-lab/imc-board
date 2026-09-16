@@ -91,6 +91,12 @@ class SqliteRepository:
                 conn.execute("ALTER TABLE report_metadata ADD COLUMN day_type TEXT")
             except sqlite3.OperationalError:
                 pass
+            try:
+                conn.execute(
+                    "ALTER TABLE daily_forecast ADD COLUMN forecast_processing_rate REAL"
+                )
+            except sqlite3.OperationalError:
+                pass
             conn.commit()
 
     def get_health_status(self) -> dict:
@@ -3158,20 +3164,22 @@ class SqliteRepository:
         method: str,
         method_label: str,
         forecast_text: str | None,
+        forecast_processing_rate: float | None = None,
     ) -> None:
         with self._connect() as conn:
             conn.execute(
                 """
                 INSERT OR REPLACE INTO daily_forecast
                 (report_date, target_date, forecast_volume, forecast_national_volume,
-                 method, method_label, forecast_text, generated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                 forecast_processing_rate, method, method_label, forecast_text, generated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     report_date,
                     target_date,
                     forecast_volume,
                     forecast_national_volume,
+                    forecast_processing_rate,
                     method,
                     method_label,
                     forecast_text,
@@ -3185,7 +3193,7 @@ class SqliteRepository:
             row = conn.execute(
                 """
                 SELECT report_date, target_date, forecast_volume, forecast_national_volume,
-                       method, method_label, forecast_text, generated_at
+                       forecast_processing_rate, method, method_label, forecast_text, generated_at
                 FROM daily_forecast
                 WHERE report_date = ?
                 """,
@@ -3198,6 +3206,7 @@ class SqliteRepository:
             "targetDate": row["target_date"],
             "forecastVolume": row["forecast_volume"],
             "forecastNationalVolume": row["forecast_national_volume"],
+            "forecastProcessingRate": row["forecast_processing_rate"],
             "method": row["method"],
             "methodLabel": row["method_label"],
             "forecastText": row["forecast_text"],

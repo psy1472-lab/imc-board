@@ -1230,6 +1230,10 @@ class BriefingService:
                 prior_outcome.forecast_volume,
                 today_volume,
                 forecast_date=report_date,
+                forecast_national_volume=prior_outcome.forecast_national_volume,
+                actual_national_volume=volume_summary.get("nationalVolume"),
+                forecast_processing_rate=prior_outcome.forecast_processing_rate,
+                actual_processing_rate=volume_summary.get("processingRate"),
             )
             if accuracy_text:
                 method_hint = f" ({prior_outcome.method_label})"

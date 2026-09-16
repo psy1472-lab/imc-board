@@ -37,7 +37,7 @@ def _synthetic_rows(start: date, count: int) -> list[VolumeMlRow]:
 
 class VolumeMlForecastTests(unittest.TestCase):
     def test_feature_names(self):
-        self.assertEqual(len(FEATURE_NAMES), 18)
+        self.assertEqual(len(FEATURE_NAMES), 21)
 
     def test_blend_with_seasonal_naive(self):
         blended = blend_with_seasonal_naive(500.0, 400.0, ml_weight=0.5)
@@ -60,9 +60,26 @@ class VolumeMlForecastTests(unittest.TestCase):
             volume_by_date=volume_map,
             report_dates=[date(2026, 6, day) for day in range(1, 20)],
         )
-        self.assertEqual(len(vector), 18)
+        self.assertEqual(len(vector), 21)
         self.assertEqual(vector[0], 6.0)
         self.assertEqual(vector[1], 6.0)
+
+    def test_build_feature_vector_imputes_last_weekday_national(self):
+        history = [500.0 + i for i in range(10)]
+        volume_map = {f"2026-06-{day:02d}": 500.0 + day for day in range(1, 22)}
+        vector = build_feature_vector(
+            date(2026, 6, 20),
+            date(2026, 6, 22),
+            history,
+            None,
+            1,
+            volume_by_date=volume_map,
+            report_dates=[date(2026, 6, day) for day in range(1, 21)],
+            last_weekday_national=1991.0,
+            last_weekday_rate=27.0,
+        )
+        self.assertEqual(vector[5], 1991.0)
+        self.assertAlmostEqual(vector[13], 100.0 / 27.0, places=4)
 
     def test_training_dataset_requires_minimum_history(self):
         rows = _synthetic_rows(date(2026, 1, 1), 10)

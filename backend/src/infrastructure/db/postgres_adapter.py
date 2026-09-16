@@ -109,6 +109,7 @@ _UPSERT_SUFFIX: dict[str, str] = {
             target_date = EXCLUDED.target_date,
             forecast_volume = EXCLUDED.forecast_volume,
             forecast_national_volume = EXCLUDED.forecast_national_volume,
+            forecast_processing_rate = EXCLUDED.forecast_processing_rate,
             method = EXCLUDED.method,
             method_label = EXCLUDED.method_label,
             forecast_text = EXCLUDED.forecast_text,

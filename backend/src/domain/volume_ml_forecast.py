@@ -27,11 +27,18 @@ from domain.volume_forecast import (
     DAY_TYPE_LABELS,
     WEEKDAY_LABELS,
     _format_forecast_volume_lead,
+    apply_identity_volume_forecast,
     apply_post_holiday_adjustment,
     forecast_national_volume,
     forecast_target_note_for,
     format_forecast_adjustment_suffix,
     resolve_forecast_target_date,
+)
+from domain.volume_forecast_identity import (
+    IDENTITY_ML_RESIDUAL_WEIGHT,
+    impute_national_features,
+    last_weekday_national_features,
+    processing_rate,
 )
 
 FEATURE_NAMES = [
@@ -113,6 +120,7 @@ class VolumeMlForecastResult:
     ml_volume: float | None = None
     bias_adjustment: float = 0.0
     forecast_national_volume: float | None = None
+    forecast_processing_rate: float | None = None
 
 
 class RegressorLike(Protocol):
@@ -217,6 +225,8 @@ def build_feature_vector(
     volume_by_date: dict[str, float] | None = None,
     report_dates: list[date] | None = None,
     operation_periods: list[dict] | None = None,
+    last_weekday_national: float | None = None,
+    last_weekday_rate: float | None = None,
 ) -> list[float]:
     prev_day_volume = history_volumes[-1] if history_volumes else 0.0
     avg_7d = _rolling_mean(history_volumes, 7) or prev_day_volume
@@ -227,8 +237,12 @@ def build_feature_vector(
     lag_4w = _same_weekday_lag(volume_map, target_day, 4)
     rolling_4w = _rolling_same_weekday_mean(volume_map, target_day, 4)
     days_since = _days_since_last_report(report_dates or [], report_day)
-    national = national_volume if national_volume is not None else 0.0
-    ratio = national / prev_day_volume if prev_day_volume > 0 else 0.0
+    national, ratio = impute_national_features(
+        national_volume,
+        prev_day_volume=prev_day_volume,
+        last_weekday_national=last_weekday_national,
+        last_weekday_rate=last_weekday_rate,
+    )
     post_shopping, special_period = _operation_period_flags(target_day, operation_periods)
     no_parcel_index, days_until_end = no_parcel_period_features(target_day, operation_periods)
     return [
@@ -268,6 +282,23 @@ def _sample_weight_for_target(
     return NORMAL_SAMPLE_WEIGHT
 
 
+def _remember_weekday_national(
+    report_day: date,
+    volume: float,
+    national: float | None,
+    last_national: float | None,
+    last_rate: float | None,
+) -> tuple[float | None, float | None]:
+    if resolve_day_type(report_day) != "weekday":
+        return last_national, last_rate
+    if national is not None and national > 0:
+        last_national = national
+    rate_today = processing_rate(volume, national)
+    if rate_today is not None:
+        last_rate = rate_today
+    return last_national, last_rate
+
+
 def build_training_dataset(
     rows: list[VolumeMlRow],
     operation_periods: list[dict] | None = None,
@@ -298,24 +329,35 @@ def build_training_dataset(
     target_days: list[date] = []
 
     history: list[float] = []
+    last_weekday_national: float | None = None
+    last_weekday_rate: float | None = None
     for row in sorted_rows:
         if row.total_volume is None:
             continue
         report_day = row.report_date
         thousand = _to_thousand(row.total_volume) or 0.0
         history.append(thousand)
+        national = _to_thousand(row.national_volume)
 
         if len(history) < 8:
+            last_weekday_national, last_weekday_rate = _remember_weekday_national(
+                report_day, thousand, national, last_weekday_national, last_weekday_rate
+            )
             continue
 
         target_day = resolve_forecast_target_date(report_day)
         if weekday_only and not is_weekday_target(resolve_day_type(target_day)):
+            last_weekday_national, last_weekday_rate = _remember_weekday_national(
+                report_day, thousand, national, last_weekday_national, last_weekday_rate
+            )
             continue
         target_key = target_day.isoformat()
         if target_key not in volume_by_date:
+            last_weekday_national, last_weekday_rate = _remember_weekday_national(
+                report_day, thousand, national, last_weekday_national, last_weekday_rate
+            )
             continue
 
-        national = _to_thousand(row.national_volume)
         special = resolve_special_communication_flag(
             row.remaining_volume,
             row.day_type or resolve_day_type(report_day),
@@ -332,11 +374,16 @@ def build_training_dataset(
             volume_by_date=volume_by_date,
             report_dates=report_dates,
             operation_periods=operation_periods,
+            last_weekday_national=last_weekday_national,
+            last_weekday_rate=last_weekday_rate,
         )
         features.append(feature_vector)
         targets.append(volume_by_date[target_key])
         weights.append(_sample_weight_for_target(target_day, operation_periods))
         target_days.append(target_day)
+        last_weekday_national, last_weekday_rate = _remember_weekday_national(
+            report_day, thousand, national, last_weekday_national, last_weekday_rate
+        )
 
     if not features:
         return (
@@ -539,6 +586,43 @@ def blend_with_seasonal_naive(
     return round(max(blended, 0.0), 1)
 
 
+def _finalize_ml_prediction(
+    prediction: float,
+    target_day: date,
+    *,
+    national_forecast: float | None,
+    volume_by_date: dict[str, float],
+    national_by_date: dict[str, float],
+    operation_periods: list[dict] | None,
+    historical_no_parcel_avg: float | None,
+) -> tuple[float, float | None, tuple[str, ...]]:
+    prediction, period_labels = apply_operation_period_volume_adjustment(
+        prediction,
+        target_day,
+        operation_periods or [],
+        historical_no_parcel_avg=historical_no_parcel_avg,
+        volume_by_date=volume_by_date,
+        before_date=target_day,
+    )
+    prediction, holiday_labels = apply_post_holiday_adjustment(
+        prediction,
+        target_day,
+        volume_by_date,
+    )
+    period_labels = period_labels + holiday_labels
+    prediction, rate, _ = apply_identity_volume_forecast(
+        target_day=target_day,
+        direct_volume=prediction,
+        forecast_national=national_forecast,
+        volume_by_date=volume_by_date,
+        national_volume_by_date=national_by_date,
+        operation_periods=operation_periods,
+        historical_no_parcel_avg=historical_no_parcel_avg,
+        residual_weight=IDENTITY_ML_RESIDUAL_WEIGHT,
+    )
+    return prediction, rate, period_labels
+
+
 def save_model_cache(
     cache_path: Path,
     *,
@@ -710,6 +794,18 @@ def predict_next_volume(
             target_day,
             national_by_date,
         )
+    last_weekday_national, last_weekday_rate = last_weekday_national_features(
+        [
+            (
+                row.report_date,
+                _to_thousand(row.total_volume),
+                _to_thousand(row.national_volume),
+            )
+            for row in sorted_rows
+            if row.total_volume is not None
+        ],
+        through=anchor_row.report_date,
+    )
     feature_vector = build_feature_vector(
         anchor_row.report_date,
         target_day,
@@ -725,6 +821,8 @@ def predict_next_volume(
         volume_by_date=volume_by_date,
         report_dates=report_dates,
         operation_periods=operation_periods,
+        last_weekday_national=last_weekday_national,
+        last_weekday_rate=last_weekday_rate,
     )
     ml_raw = float(model.predict(np.asarray([feature_vector], dtype=float))[0])
     ml_raw = round(max(ml_raw, 0.0), 1)
@@ -763,20 +861,15 @@ def predict_next_volume(
             ml_mape = _mape(holdout_y, ml_holdout)
         if ml_mape > baseline_mape * 1.02:
             prediction = round(max(baseline_4w - bias, 0.0), 1)
-            prediction, period_labels = apply_operation_period_volume_adjustment(
+            prediction, rate_forecast, period_labels = _finalize_ml_prediction(
                 prediction,
                 target_day,
-                operation_periods or [],
-                historical_no_parcel_avg=historical_no_parcel_avg,
+                national_forecast=national_forecast,
                 volume_by_date=volume_by_date,
-                before_date=target_day,
+                national_by_date=national_by_date,
+                operation_periods=operation_periods,
+                historical_no_parcel_avg=historical_no_parcel_avg,
             )
-            prediction, holiday_labels = apply_post_holiday_adjustment(
-                prediction,
-                target_day,
-                volume_by_date,
-            )
-            period_labels = period_labels + holiday_labels
             target_idx = target_day.weekday()
             return VolumeMlForecastResult(
                 report_date=report_date,
@@ -797,6 +890,7 @@ def predict_next_volume(
                 ml_volume=ml_raw,
                 bias_adjustment=bias,
                 forecast_national_volume=national_forecast,
+                forecast_processing_rate=rate_forecast,
             )
 
         ml_weight = _tune_blend_weight(
@@ -811,20 +905,15 @@ def predict_next_volume(
 
     prediction = blend_with_seasonal_naive(ml_raw, baseline_4w, ml_weight=ml_weight)
     prediction = round(max(prediction - bias, 0.0), 1)
-    prediction, period_labels = apply_operation_period_volume_adjustment(
+    prediction, rate_forecast, period_labels = _finalize_ml_prediction(
         prediction,
         target_day,
-        operation_periods or [],
-        historical_no_parcel_avg=historical_no_parcel_avg,
+        national_forecast=national_forecast,
         volume_by_date=volume_by_date,
-        before_date=target_day,
+        national_by_date=national_by_date,
+        operation_periods=operation_periods,
+        historical_no_parcel_avg=historical_no_parcel_avg,
     )
-    prediction, holiday_labels = apply_post_holiday_adjustment(
-        prediction,
-        target_day,
-        volume_by_date,
-    )
-    period_labels = period_labels + holiday_labels
 
     target_idx = target_day.weekday()
     return VolumeMlForecastResult(
@@ -846,6 +935,7 @@ def predict_next_volume(
         ml_volume=ml_raw,
         bias_adjustment=bias,
         forecast_national_volume=national_forecast,
+        forecast_processing_rate=rate_forecast,
     )
 
 
@@ -862,6 +952,7 @@ def build_ml_volume_forecast_text(result: VolumeMlForecastResult) -> str:
         target_hint=target_hint,
         forecast_volume=result.forecast_volume,
         forecast_national_volume=result.forecast_national_volume,
+        forecast_processing_rate=result.forecast_processing_rate,
     )
 
     metric_text = ", ".join(

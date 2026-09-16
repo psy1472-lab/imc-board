@@ -150,11 +150,14 @@ class VolumeForecastTests(unittest.TestCase):
                 seasonal_naive_1w=528.0,
                 seasonal_naive_4w=531.0,
                 forecast_method="seasonal_naive_weekday",
+                forecast_processing_rate=27.1,
             )
         )
         self.assertIn("542.3천개", text)
         self.assertIn("612.8천개", text)
         self.assertIn("전국접수물량", text)
+        self.assertIn("전국대비처리율", text)
+        self.assertIn("27.1%", text)
         self.assertIn("화", text)
         self.assertIn("Seasonal Naive", text)
         self.assertIn("4주 평균", text)

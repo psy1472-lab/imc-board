@@ -25,6 +25,7 @@ class VolumeForecastOutcome:
     operation_period_labels: tuple[str, ...] = ()
     ml_result: VolumeMlForecastResult | None = None
     forecast_national_volume: float | None = None
+    forecast_processing_rate: float | None = None
 
 
 def is_weekday_target(day_type: str) -> bool:

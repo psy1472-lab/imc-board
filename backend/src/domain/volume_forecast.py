@@ -5,6 +5,12 @@ from datetime import date, timedelta
 
 from domain.day_type import is_post_holiday, resolve_day_type
 from domain.operation_period import apply_operation_period_volume_adjustment
+from domain.volume_forecast_identity import (
+    build_processing_rate_history,
+    compose_volume_from_national_and_rate,
+    forecast_processing_rate,
+    reconcile_volume_identity,
+)
 
 WEEKDAY_LABELS = ["월", "화", "수", "목", "금", "토", "일"]
 
@@ -68,6 +74,7 @@ class VolumeForecastResult:
     forecast_method: str = "seasonal_naive_ensemble"
     operation_period_labels: tuple[str, ...] = ()
     forecast_national_volume: float | None = None
+    forecast_processing_rate: float | None = None
 
 
 def resolve_forecast_target_date(report_day: date) -> date:
@@ -275,12 +282,63 @@ def _format_forecast_volume_lead(
     target_hint: str,
     forecast_volume: float,
     forecast_national_volume: float | None,
+    forecast_processing_rate: float | None = None,
 ) -> str:
     volume_part = f"예상 처리물량은 약 {forecast_volume:,.1f}천개"
     if forecast_national_volume is not None:
         volume_part += f", 예상 전국접수물량은 약 {forecast_national_volume:,.1f}천개"
+    if forecast_processing_rate is not None:
+        volume_part += f", 예상 전국대비처리율은 약 {forecast_processing_rate:.1f}%"
     volume_part += "입니다."
     return f"전망일({weekday_label}·{day_type_label}){target_hint}{volume_part}"
+
+
+def apply_identity_volume_forecast(
+    *,
+    target_day: date,
+    direct_volume: float,
+    forecast_national: float | None,
+    volume_by_date: dict[str, float] | None,
+    national_volume_by_date: dict[str, float] | None,
+    operation_periods: list[dict] | None = None,
+    historical_no_parcel_avg: float | None = None,
+    residual_weight: float = 0.0,
+) -> tuple[float, float | None, str]:
+    """전국접수 × 처리율로 처리량을 맞추고, 없으면 직접 예측을 쓴다."""
+    rate_history = build_processing_rate_history(
+        volume_by_date,
+        national_volume_by_date,
+        before_date=target_day,
+    )
+    rate = forecast_processing_rate(target_day, rate_history)
+    identity = compose_volume_from_national_and_rate(forecast_national, rate)
+    if identity is not None:
+        identity, _ = apply_operation_period_volume_adjustment(
+            identity,
+            target_day,
+            operation_periods or [],
+            historical_no_parcel_avg=historical_no_parcel_avg,
+            volume_by_date=volume_by_date,
+            before_date=target_day,
+        )
+        identity, _ = apply_post_holiday_adjustment(
+            identity,
+            target_day,
+            volume_by_date,
+        )
+        if residual_weight:
+            blended = round(identity + residual_weight * (direct_volume - identity), 1)
+            return max(blended, 0.0), rate, "identity_ml_residual"
+        volume, method = reconcile_volume_identity(
+            direct_volume=direct_volume,
+            identity_volume=identity,
+            forecast_national=forecast_national,
+            weekday_rate=rate,
+        )
+        if volume is None:
+            return direct_volume, rate, "direct"
+        return volume, rate, method
+    return direct_volume, rate, "direct"
 
 
 def forecast_next_day_volume(
@@ -438,6 +496,18 @@ def forecast_next_day_volume(
         )
         period_labels = tuple(dict.fromkeys(period_labels + national_period_labels + national_holiday_labels))
 
+    forecast_volume, rate_forecast, identity_method = apply_identity_volume_forecast(
+        target_day=target,
+        direct_volume=forecast_volume,
+        forecast_national=national_forecast,
+        volume_by_date=volume_by_date,
+        national_volume_by_date=national_volume_by_date,
+        operation_periods=operation_periods,
+        historical_no_parcel_avg=historical_no_parcel_avg,
+    )
+    if identity_method.startswith("identity"):
+        method = f"{method}+{identity_method}"
+
     seasonal_samples = same_type_sample_count or weekday_sample_count
     if seasonal_samples >= 4 and seasonal_naive_4w is not None and seasonal_naive_1w is not None:
         confidence = "high"
@@ -478,6 +548,7 @@ def forecast_next_day_volume(
         forecast_method=method,
         operation_period_labels=period_labels,
         forecast_national_volume=national_forecast,
+        forecast_processing_rate=rate_forecast,
     )
 
 
@@ -494,6 +565,7 @@ def build_volume_forecast_text(result: VolumeForecastResult) -> str:
         target_hint=target_hint,
         forecast_volume=result.forecast_volume,
         forecast_national_volume=result.forecast_national_volume,
+        forecast_processing_rate=result.forecast_processing_rate,
     )
 
     detail_parts: list[str] = []
@@ -573,6 +645,20 @@ def _accuracy_clause(forecast_volume: float, actual_volume: float, label: str) -
     )
 
 
+def _accuracy_clause_rate(forecast_rate: float, actual_rate: float) -> str:
+    diff_pct = abs(actual_rate - forecast_rate) / actual_rate * 100
+    direction = "높게" if forecast_rate > actual_rate else "낮게"
+    if diff_pct < 5:
+        return (
+            f"전국대비처리율 예측 {forecast_rate:.1f}%, 실제 {actual_rate:.1f}%로 "
+            f"오차 약 {diff_pct:.1f}%"
+        )
+    return (
+        f"전국대비처리율 예측 {forecast_rate:.1f}%, 실제 {actual_rate:.1f}%로 "
+        f"약 {diff_pct:.1f}% {direction} 예측"
+    )
+
+
 def build_forecast_accuracy_text(
     forecast_volume: float,
     actual_volume: float,
@@ -580,32 +666,40 @@ def build_forecast_accuracy_text(
     forecast_date: str,
     forecast_national_volume: float | None = None,
     actual_national_volume: float | None = None,
+    forecast_processing_rate: float | None = None,
+    actual_processing_rate: float | None = None,
     source_label: str = "전일 예측",
 ) -> str:
     if actual_volume <= 0:
         return ""
     processing = _accuracy_clause(forecast_volume, actual_volume, "처리물량")
-    national = ""
+    extras: list[str] = []
     if (
         forecast_national_volume is not None
         and actual_national_volume is not None
         and actual_national_volume > 0
     ):
-        national = "; " + _accuracy_clause(
-            forecast_national_volume,
-            actual_national_volume,
-            "전국접수물량",
+        extras.append(
+            _accuracy_clause(
+                forecast_national_volume,
+                actual_national_volume,
+                "전국접수물량",
+            )
         )
+    if forecast_processing_rate is not None and actual_processing_rate not in (None, 0):
+        extras.append(_accuracy_clause_rate(forecast_processing_rate, actual_processing_rate))
+    extra_text = ("; " + "; ".join(extras)) if extras else ""
     similar = abs(actual_volume - forecast_volume) / actual_volume * 100 < 5
-    ending = " — 예측과 유사했습니다." if similar and not national else "되었습니다."
-    if national and similar:
+    ending = " — 예측과 유사했습니다." if similar and not extras else "되었습니다."
+    if extras and similar:
         ending = "입니다."
-    return f"당일({forecast_date}) {source_label} {processing}{national}{ending}"
+    return f"당일({forecast_date}) {source_label} {processing}{extra_text}{ending}"
 
 
 def summarize_forecast_accuracy(rows: list[dict]) -> dict | None:
     processing_errors: list[float] = []
     national_errors: list[float] = []
+    rate_errors: list[float] = []
     weekday_errors: list[float] = []
     holiday_errors: list[float] = []
     for row in rows:
@@ -626,6 +720,10 @@ def summarize_forecast_accuracy(rows: list[dict]) -> dict | None:
         national_actual = row.get("actualNationalVolume")
         if national_forecast is not None and national_actual not in (None, 0):
             national_errors.append(abs(national_forecast - national_actual) / national_actual * 100)
+        rate_forecast = row.get("forecastProcessingRate")
+        rate_actual = row.get("actualProcessingRate")
+        if rate_forecast is not None and rate_actual not in (None, 0):
+            rate_errors.append(abs(rate_forecast - rate_actual) / rate_actual * 100)
     if len(processing_errors) < 3:
         return None
     return {
@@ -635,6 +733,10 @@ def summarize_forecast_accuracy(rows: list[dict]) -> dict | None:
             round(sum(national_errors) / len(national_errors), 1) if national_errors else None
         ),
         "nationalSampleCount": len(national_errors),
+        "rateMape": (
+            round(sum(rate_errors) / len(rate_errors), 1) if rate_errors else None
+        ),
+        "rateSampleCount": len(rate_errors),
         "weekdayMape": (
             round(sum(weekday_errors) / len(weekday_errors), 1) if weekday_errors else None
         ),
@@ -656,6 +758,11 @@ def build_forecast_accuracy_window_text(summary: dict | None) -> str:
         text += (
             f", 전국접수물량 MAPE 약 {summary['nationalMape']:.1f}%"
             f"({summary['nationalSampleCount']}일)"
+        )
+    if summary.get("rateMape") is not None:
+        text += (
+            f", 전국대비처리율 MAPE 약 {summary['rateMape']:.1f}%"
+            f"({summary['rateSampleCount']}일)"
         )
     extras: list[str] = []
     if summary.get("weekdayMape") is not None:

@@ -77,6 +77,7 @@ class VolumeForecastService:
             seasonal_naive_4w=rule_result.seasonal_naive_4w,
             operation_period_labels=rule_result.operation_period_labels,
             forecast_national_volume=rule_result.forecast_national_volume,
+            forecast_processing_rate=rule_result.forecast_processing_rate,
         )
 
     def predict_for_target(
@@ -161,6 +162,7 @@ class VolumeForecastService:
             seasonal_naive_4w=rule_result.seasonal_naive_4w,
             operation_period_labels=rule_result.operation_period_labels,
             forecast_national_volume=rule_result.forecast_national_volume,
+            forecast_processing_rate=rule_result.forecast_processing_rate,
         )
 
     def build_forecast_text(
@@ -212,6 +214,8 @@ class VolumeForecastService:
             forecast_volume=outcome.forecast_volume,
             forecast_national_volume=outcome.forecast_national_volume
             or (outcome.ml_result.forecast_national_volume if outcome.ml_result else None),
+            forecast_processing_rate=outcome.forecast_processing_rate
+            or (outcome.ml_result.forecast_processing_rate if outcome.ml_result else None),
             method=outcome.method,
             method_label=outcome.method_label,
             forecast_text=forecast_text,
@@ -290,6 +294,7 @@ class VolumeForecastService:
             operation_period_labels=result.operation_period_labels,
             ml_result=result,
             forecast_national_volume=result.forecast_national_volume,
+            forecast_processing_rate=result.forecast_processing_rate,
         )
 
 
