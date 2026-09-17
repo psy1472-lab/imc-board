@@ -308,7 +308,6 @@ class BriefingService:
                         "text": diagnosis,
                         "status": "WARNING",
                         "statusLabel": STATUS_LABELS["WARNING"],
-                        "assessment": JUDGMENT_PHRASES["WARNING"],
                     }
                 )
         elif night_metrics.avg_staff is not None:

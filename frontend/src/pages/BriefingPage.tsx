@@ -51,9 +51,11 @@ function StatusBadge({ status, label }: { status?: string; label?: string }) {
 }
 
 function buildItemDetail(item: BriefingItem) {
-  const parts = [item.text, item.assessment].filter(
-    (part): part is string => typeof part === "string" && part.trim().length > 0,
-  );
+  const hasValue = item.value !== null && item.value !== undefined && item.value !== "";
+  const parts = [
+    ...(hasValue ? [item.text] : []),
+    item.assessment,
+  ].filter((part): part is string => typeof part === "string" && part.trim().length > 0);
   const uniqueParts = parts.filter((part, index) => parts.indexOf(part) === index);
   return uniqueParts.length ? uniqueParts.join(" ") : null;
 }
