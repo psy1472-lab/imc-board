@@ -4,10 +4,14 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime
 
 from application.volume_forecast_service import VolumeForecastService
+from domain.staffing_adequacy import (
+    build_tomorrow_staffing_items,
+    compute_night_shift_metrics,
+    diagnose_remaining_volume,
+)
 from domain.volume_forecast import (
     build_forecast_accuracy_text,
     build_volume_forecast_text,
-    estimate_staff_for_volume,
 )
 from domain.volume_ml_forecast import build_ml_volume_forecast_text
 from infrastructure.db.sqlite_repository import SqliteRepository
@@ -62,19 +66,24 @@ class BriefingService:
         if not summary:
             return {}
 
-        with ThreadPoolExecutor(max_workers=6) as pool:
+        with ThreadPoolExecutor(max_workers=7) as pool:
             volume_future = pool.submit(self.repository.get_volume_analysis, report_date)
             staffing_future = pool.submit(self.repository.get_staffing_analysis, report_date)
             transport_future = pool.submit(self.repository.get_transport_analysis, report_date)
             equipment_future = pool.submit(self.repository.get_equipment_analysis, report_date)
             safety_future = pool.submit(self.repository.get_safety_analysis, report_date)
             hourly_future = pool.submit(self.repository.get_hourly_volume_pattern, report_date)
+            staffing_reference_future = pool.submit(
+                self.repository.get_staffing_adequacy_reference,
+                report_date,
+            )
             volume = volume_future.result()
             staffing = staffing_future.result()
             transport = transport_future.result()
             equipment = equipment_future.result()
             safety = safety_future.result()
             hourly_pattern = hourly_future.result()
+            staffing_reference = staffing_reference_future.result()
 
         anomalies = safety.get("anomalies", [])
         quota_overages = transport.get("quotaOverages", [])
@@ -101,7 +110,12 @@ class BriefingService:
                     "title": "주요 변화",
                     "items": major_changes,
                 },
-                "staffing": self._build_staffing_section(staffing),
+                "staffing": self._build_staffing_section(
+                    staffing,
+                    volume=volume,
+                    transport=transport,
+                    staffing_reference=staffing_reference,
+                ),
                 "transport": self._build_transport_section(transport, anomalies),
                 "equipment": self._build_equipment_section(equipment, anomalies),
                 "safety": self._build_safety_section(safety, anomalies),
@@ -130,6 +144,7 @@ class BriefingService:
                     forecast_ctx=forecast_ctx,
                     ml_rows=ml_rows,
                     report_dates=report_dates,
+                    staffing_reference=staffing_reference,
                 ),
             }
         elif sections == "core":
@@ -147,6 +162,7 @@ class BriefingService:
         equipment = self.repository.get_equipment_analysis(report_date)
         safety = self.repository.get_safety_analysis(report_date)
         hourly_pattern = self.repository.get_hourly_volume_pattern(report_date)
+        staffing_reference = self.repository.get_staffing_adequacy_reference(report_date)
         forecast_ctx = self.repository.get_volume_forecast_context(report_date)
         ml_rows = self.volume_forecast_service.ml_service.load_rows(report_date)
         report_dates = self.repository.list_report_dates()
@@ -169,6 +185,7 @@ class BriefingService:
                     forecast_ctx=forecast_ctx,
                     ml_rows=ml_rows,
                     report_dates=report_dates,
+                    staffing_reference=staffing_reference,
                 ),
             },
         }
@@ -213,6 +230,10 @@ class BriefingService:
     def _build_staffing_section(
         self,
         staffing: dict,
+        *,
+        volume: dict | None = None,
+        transport: dict | None = None,
+        staffing_reference: list[dict] | None = None,
     ) -> dict:
         summary = staffing.get("summary", {})
         benchmarks = staffing.get("benchmarks", {})
@@ -269,12 +290,47 @@ class BriefingService:
             },
         ]
 
-        statuses = [item["status"] for item in items]
-        overall_status = self._worst_status(*statuses)
+        remaining_volume_k = (volume or {}).get("summary", {}).get("remainingVolume")
+        hourly = staffing.get("hourly") or {}
+        night_metrics = compute_night_shift_metrics(hourly)
+        if remaining_volume_k and remaining_volume_k > 0 and staffing_reference:
+            diagnosis = diagnose_remaining_volume(
+                (volume or {}).get("summary", {}).get("totalVolume") or 0,
+                remaining_volume_k,
+                night_metrics,
+                staffing_reference,
+                exchange_remaining=(transport or {}).get("summary", {}).get("exchangeRemaining"),
+            )
+            if diagnosis:
+                items.append(
+                    {
+                        "label": "잔량 원인 참고",
+                        "text": diagnosis,
+                        "status": "WARNING",
+                        "statusLabel": STATUS_LABELS["WARNING"],
+                        "assessment": JUDGMENT_PHRASES["WARNING"],
+                    }
+                )
+        elif night_metrics.avg_staff is not None:
+            items.append(
+                {
+                    "label": "야간 인력 현황",
+                    "text": (
+                        f"18~05시 평균 {night_metrics.avg_staff:.0f}명"
+                        f"{f', 피크 {night_metrics.peak_staff}명' if night_metrics.peak_staff else ''}"
+                        f"{f', 인시당 {night_metrics.avg_productivity:.0f}개/시' if night_metrics.avg_productivity else ''} "
+                        f"수준으로 집계되었습니다."
+                    ),
+                }
+            )
+
+        statuses = [item["status"] for item in items if item.get("status")]
+        overall_status = self._worst_status(*(statuses or ["NORMAL"]))
         gaps = [
             "결위율·정원·단기근로자·연장근무 (PDF 미추출)",
-            "물량 대비 적정인력 산출 미제공",
         ]
+        if not staffing_reference:
+            gaps.append("물량 대비 적정인력 산출 미제공")
         if summary.get("productivity") is None:
             gaps.insert(0, "인시당 처리량 원본 미추출")
         assessment = self._section_assessment(
@@ -1183,6 +1239,7 @@ class BriefingService:
         forecast_ctx: dict,
         ml_rows: list,
         report_dates: list[str],
+        staffing_reference: list[dict] | None = None,
     ) -> list[dict]:
         items: list[dict] = []
         volume_summary = volume.get("summary", {})
@@ -1269,29 +1326,15 @@ class BriefingService:
             if forecast_volume is not None
             else (forecast_outcome.forecast_volume if forecast_outcome is not None else None)
         )
-        suggested_staff = (
-            estimate_staff_for_volume(forecast_volume, ref_volume, avg_staff_7d)
-            if forecast_volume is not None
-            else None
+        items.extend(
+            build_tomorrow_staffing_items(
+                forecast_volume,
+                staffing_reference or [],
+                hourly_pattern,
+                legacy_staff=avg_staff_7d,
+                legacy_reference_volume=ref_volume,
+            )
         )
-        if suggested_staff is not None:
-            items.append(
-                {
-                    "label": "적정인력 참고",
-                    "text": (
-                        f"예상 물량과 최근 7업무일 평균 생산성·인력 패턴을 반영하면 "
-                        f"실근무인력 약 {suggested_staff}명 배치를 검토할 수 있습니다."
-                    ),
-                }
-            )
-        elif staffing.get("summary", {}).get("avgStaff") is not None:
-            avg_staff = staffing["summary"]["avgStaff"]
-            items.append(
-                {
-                    "label": "적정인력 참고",
-                    "text": f"최근 평균 실근무인력 {avg_staff}명 수준의 배치를 검토할 수 있습니다.",
-                }
-            )
 
         risks: list[str] = []
         if (transport.get("summary", {}) or {}).get("overageOfficeCount", 0) > 0:

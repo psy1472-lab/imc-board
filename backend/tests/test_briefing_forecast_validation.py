@@ -27,6 +27,7 @@ class BriefingForecastValidationTests(unittest.TestCase):
             "anomalies": [],
         }
         repository.get_hourly_volume_pattern.return_value = {}
+        repository.get_staffing_adequacy_reference.return_value = []
         repository.get_volume_forecast_context.return_value = {
             "forecastTargetDate": "2026-09-01",
             "tomorrowDayType": "weekday",

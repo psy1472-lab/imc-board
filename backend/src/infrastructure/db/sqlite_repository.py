@@ -27,6 +27,7 @@ from domain.transport_quota import (
 from domain.volume_forecast import forecast_target_note_for, resolve_forecast_target_date
 from domain.entities import ParsedReport
 from domain.hour_slots import HOUR_SLOTS, format_hour_label, normalize_hour_slot
+from domain.staffing_adequacy import NIGHT_SHIFT_SLOTS
 
 _PDF_DATE_STAMP_RE = re.compile(r"(?<!\d)(\d{2}\.\d{2}\.\d{2})(?!\d)")
 
@@ -979,6 +980,54 @@ class SqliteRepository:
             },
             "dailyTrend": trend_30d_series,
         }
+
+    def get_staffing_adequacy_reference(self, report_date: str, limit: int = 60) -> list[dict]:
+        night_slot_placeholders = ",".join("?" * len(NIGHT_SHIFT_SLOTS))
+        with self._connect() as conn:
+            rows = conn.execute(
+                f"""
+                SELECT
+                    ds.report_date,
+                    ds.total_volume,
+                    ds.remaining_volume,
+                    ds.productivity,
+                    night.avg_staff AS night_avg_staff,
+                    night.peak_staff AS night_peak_staff,
+                    night.avg_productivity AS night_avg_productivity
+                FROM daily_summary ds
+                LEFT JOIN (
+                    SELECT report_date,
+                           AVG(actual_staff) AS avg_staff,
+                           MAX(actual_staff) AS peak_staff,
+                           AVG(productivity) AS avg_productivity
+                    FROM staffing
+                    WHERE hour_slot IN ({night_slot_placeholders})
+                      AND actual_staff IS NOT NULL
+                    GROUP BY report_date
+                ) night ON ds.report_date = night.report_date
+                WHERE ds.report_date < ?
+                ORDER BY ds.report_date DESC
+                LIMIT ?
+                """,
+                (*NIGHT_SHIFT_SLOTS, report_date, limit),
+            ).fetchall()
+
+        return [
+            {
+                "reportDate": row["report_date"],
+                "totalVolumeK": self._to_thousand(row["total_volume"]),
+                "remainingVolumeK": self._to_thousand(row["remaining_volume"]),
+                "productivity": row["productivity"],
+                "nightAvgStaff": round(row["night_avg_staff"], 1) if row["night_avg_staff"] is not None else None,
+                "nightPeakStaff": row["night_peak_staff"],
+                "nightAvgProductivity": (
+                    round(row["night_avg_productivity"], 1)
+                    if row["night_avg_productivity"] is not None
+                    else None
+                ),
+            }
+            for row in rows
+        ]
 
     def _compliance_rate(self, actual: int | float | None, standard: int | float | None) -> float | None:
         if actual is None or standard in (None, 0):
