@@ -365,7 +365,10 @@ class SafetyCheckExtractor:
     )
     INCIDENT_PERSON_RE = re.compile(r"(?<![가-힣])([가-힣]{2,4})\(([남여])\)")
     DEPARTMENT_RE = re.compile(r"(?:물류\d+과|\d+팀|[가-힣]{1,6}(?:과|팀))(?!상)")
-    INJURY_TYPE_RE = re.compile(r"(찰과상|타박상|염좌|열상|창상|골절|화상|자상|절단|좌상|출혈|끼임)")
+    INJURY_TYPE_RE = re.compile(
+        r"(찰과상|타박상|염좌|열상|창상|골절|화상|자상|절단|좌상|출혈|끼임|과호흡|어지러움|호흡곤란|실신|골절상)"
+    )
+    INCIDENT_NAME_CELL_RE = re.compile(r"^[가-힣]{2,4}$")
     DISPATCH_NOISE_RE = re.compile(
         r"(?:[가-힣]\s*){1,4}집\s+[가-힣외,\d\s국]+[’']\d{2}\.\d{1,2}월[\d,.\s↑대]+"
     )
@@ -383,7 +386,7 @@ class SafetyCheckExtractor:
         tables = page.tables if page else []
         categories = self._extract_categories(page_text, report_date)
         incidents = self._extract_incidents_from_tables(tables, report_date)
-        if incidents is None:
+        if not incidents:
             incidents = self._extract_incidents_from_text(page_text, report_date)
         return categories, incidents
 
@@ -421,7 +424,7 @@ class SafetyCheckExtractor:
                 found_header = True
                 incidents.extend(parsed)
         if found_header:
-            return incidents
+            return incidents or None
         return None
 
     def _parse_incident_table(self, table, report_date: date):
@@ -443,7 +446,7 @@ class SafetyCheckExtractor:
         for row in table[header_index + 1 :]:
             cells = self._row_cells(row)
             row_text = " ".join(cells)
-            person = self._first_person(row_text)
+            person = self._incident_person_from_row(cells, columns, row_text)
             if person is None:
                 if incidents and "조치사항" in row_text.replace(" ", ""):
                     action = self._extract_action(row_text)
@@ -454,15 +457,13 @@ class SafetyCheckExtractor:
                 continue
 
             name, gender = person
-            department = self._clean_department(self._cell_at(cells, columns.get("department"))) or last_department
+            department = self._department_from_cells(cells, columns, last_department)
             if department:
                 last_department = department
             occurrence_time = self._extract_time(
                 self._cell_at(cells, columns.get("time")) or row_text
             )
-            injury_type = self._extract_injury_type(
-                self._cell_at(cells, columns.get("injury")) or row_text
-            )
+            injury_type = self._injury_from_cells(cells, columns, row_text)
             description = self._clean_description(
                 self._cell_at(cells, columns.get("description")) or "",
                 name,
@@ -548,6 +549,48 @@ class SafetyCheckExtractor:
             return None
         return match.group(1), match.group(2)
 
+    def _incident_person_from_row(
+        self,
+        cells: list[str],
+        columns: dict[str, int],
+        row_text: str,
+    ) -> tuple[str, str | None] | None:
+        person = self._first_person(row_text)
+        if person is not None:
+            return person
+        name_cell = self._cell_at(cells, columns.get("name")).strip()
+        if self.INCIDENT_NAME_CELL_RE.fullmatch(name_cell):
+            return name_cell, None
+        return None
+
+    def _department_from_cells(
+        self,
+        cells: list[str],
+        columns: dict[str, int],
+        last_department: str | None,
+    ) -> str | None:
+        dept_cell = self._cell_at(cells, columns.get("department")).strip()
+        if not dept_cell:
+            return last_department
+        cleaned = self._clean_department(dept_cell)
+        return cleaned or dept_cell
+
+    def _injury_from_cells(
+        self,
+        cells: list[str],
+        columns: dict[str, int],
+        row_text: str,
+    ) -> str | None:
+        injury_cell = self._cell_at(cells, columns.get("injury"))
+        injury = self._extract_injury_type(injury_cell or row_text)
+        if injury:
+            return injury
+        if injury_cell:
+            first_line = injury_cell.replace("\n", " ").strip()
+            if first_line:
+                return first_line.split()[0]
+        return None
+
     def _extract_department(self, block: str, name: str, gender: str) -> str | None:
         before_name = re.search(
             rf"(?:^|\s)({self.DEPARTMENT_RE.pattern})\s+{re.escape(name)}\({gender}\)",
@@ -595,7 +638,10 @@ class SafetyCheckExtractor:
         text = self.DISPATCH_NOISE_RE.sub(" ", block)
         text = self.ACTION_BOILERPLATE_RE.sub(" ", text)
         text = re.sub(r"부서명.*?재해경위", " ", text)
-        text = re.sub(rf"{re.escape(name)}\({gender}\)", " ", text)
+        if gender:
+            text = re.sub(rf"{re.escape(name)}\({gender}\)", " ", text)
+        else:
+            text = re.sub(rf"{re.escape(name)}(?=\s|\(|$)", " ", text)
         text = re.sub(r"(?<![가-힣])(?:물류\d+과|\d+팀|[가-힣]{1,6}(?:과|팀))(?!상)(?=\s)", " ", text)
         text = re.sub(r"우정실무원|\(공무직\)|\(한시직\)|한시직|공무직", " ", text)
         text = re.sub(r"[’']\d{2}\.\d{1,2}월", " ", text)

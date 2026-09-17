@@ -57,6 +57,39 @@ def test_incident_from_table_ignores_adjacent_dispatch_columns():
     assert "응급조치 후 작업장 복귀" in (incident.description or "")
 
 
+def test_incident_from_table_without_gender_suffix():
+    extractor = SafetyCheckExtractor()
+    tables = [
+        [
+            ["부서명", "성명(성별)", "연령", "직급", "발생시간", "상해종류", "재해경위"],
+            [
+                "발송",
+                "한은준",
+                "58",
+                "공무직",
+                "'26.09.17.\n05:50",
+                "과호흡\n어지러움",
+                "기침을 하던 중 과호흡이 발생, 심한 두통으로 119 연락",
+            ],
+        ]
+    ]
+    text = (
+        "관리감독자 안전보건 점검 일지\n"
+        "※ 재해현황\n"
+        "부서명 성명(성별) 연령 직급 발생시간 상해종류 재해경위\n"
+        "발송 한은준 58 공무직 05:50 과호흡 어지러움\n"
+    )
+    _, incidents = extractor.extract(_document(text, tables), date(2026, 9, 16))
+    assert len(incidents) == 1
+    incident = incidents[0]
+    assert incident.department == "발송"
+    assert incident.victim_name == "한은준"
+    assert incident.gender is None
+    assert incident.occurrence_time == "05:50"
+    assert incident.injury_type == "과호흡"
+    assert "과호흡" in (incident.description or "")
+
+
 def test_text_fallback_does_not_treat_abrasion_as_department():
     extractor = SafetyCheckExtractor()
     text = (
