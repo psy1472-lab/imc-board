@@ -31,6 +31,16 @@ class HourlyThroughput:
 
 
 @dataclass
+class HourlyUnloading:
+    report_date: date
+    hour_slot: str
+    collection_vehicles: int | None = None
+    quota_vehicles: int | None = None
+    arrival_vehicles: int | None = None
+    exchange_vehicles: int | None = None
+
+
+@dataclass
 class StaffingHour:
     report_date: date
     hour_slot: str
@@ -125,6 +135,7 @@ class ParsedReport:
     daily_summary: DailySummary
     day_type: str = "weekday"
     hourly_throughput: list[HourlyThroughput] = field(default_factory=list)
+    hourly_unloading: list[HourlyUnloading] = field(default_factory=list)
     staffing: list[StaffingHour] = field(default_factory=list)
     quota_exchange: QuotaExchange | None = None
     transport_offices: list[TransportOffice] = field(default_factory=list)

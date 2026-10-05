@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { HourlyStaffChart } from "../components/charts/HourlyStaffChart";
+import { HourlyUnloadingChart } from "../components/charts/HourlyUnloadingChart";
 import { HourlyVolumeChart } from "../components/charts/HourlyVolumeChart";
 import { MachineSortingPieChart } from "../components/charts/MachineSortingPieChart";
 import { Panel } from "../components/layout/Panel";
@@ -132,6 +133,7 @@ export default function SummaryDashboard() {
       <section className="imc-summary-row-2-1">
         <Panel title="시간대별 처리물량">
           <HourlyVolumeChart data={data.hourlyVolume} />
+          <HourlyUnloadingChart data={data.hourlyUnloading} />
         </Panel>
         <Panel title="오늘의 특이사항 / 이상징후">
           <AnomalyList items={data.anomalies} />

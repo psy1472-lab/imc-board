@@ -39,6 +39,17 @@ export type DashboardSummary = {
     }>;
     peak?: { slot?: string | null; value?: number | null };
   };
+  hourlyUnloading?: {
+    slots: string[];
+    current: Array<{
+      slot: string;
+      label?: string;
+      collection?: number | null;
+      quota?: number | null;
+      arrival?: number | null;
+      exchange?: number | null;
+    }>;
+  };
   hourlyStaff: {
     slots: string[];
     actualStaff: Array<{ slot: string; label?: string; value?: number | null }>;

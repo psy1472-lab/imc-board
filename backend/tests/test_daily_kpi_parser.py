@@ -547,3 +547,37 @@ def test_extract_title_date_with_spaces():
     report_date, _, summary = extractor.extract(document)
     assert report_date == date(2025, 1, 15)
     assert summary.total_volume == 449000
+
+
+HOURLY_UNLOADING_SNIPPET = """
+시간대별 처리 및 인력투입 현황 (평균 시간당 처리량(19시~00시) : 3.5만 개)
+구 분 ~18 18~ 19~ 20~ 21~ 22~ 23~ 0~ 1~ 2~ 3~ 4~ 5~ 6~ 합계
+발송 1.0 2.2 3.4 2.9 3.6 3.3 4.4 4.9 1.3 - - - - - 26.0
+도착 1.0 - - - - - - - 1.6 4.0 3.5 1.3 0.2 - 11.6
+(단위:만개) 계 1.0 2.2 3.4 2.9 3.6 3.3 4.4 4.9 2.9 4.0 3.5 1.3 0.2 - 37.6
+수집 35 33 29 23 13 4 - - - - - - - - 137
+하차 쿼터 3 4 4 7 23 16 25 11 - - - - - - 93 -
+차량 도착 1 1 - - 3 - 1 - 18 18 8 - - - 50 -
+(단위:대) 교환 1 1 - - 5 12 26 25 25 25 - - - - 120
+계 40 39 33 30 44 32 52 36 43 43 8 - - 400
+"""
+
+
+def test_hourly_unloading_vehicles_from_standard_table():
+    document = PdfDocument(
+        path="26.09.08.pdf",
+        pages=[PdfPage(index=0, text=HOURLY_UNLOADING_SNIPPET, tables=[])],
+    )
+    rows = DailyKpiExtractor().extract_hourly_unloading(document, date(2026, 9, 8))
+    by_slot = {item.hour_slot: item for item in rows}
+    assert by_slot["~18"].collection_vehicles == 35
+    assert by_slot["18"].quota_vehicles == 4
+    assert by_slot["21"].quota_vehicles == 23
+    assert by_slot["01"].arrival_vehicles == 18
+    assert by_slot["23"].exchange_vehicles == 26
+    assert by_slot["06"].collection_vehicles is None
+    assert sum(item.collection_vehicles or 0 for item in rows) == 137
+    assert sum(item.quota_vehicles or 0 for item in rows) == 93
+    assert sum(item.arrival_vehicles or 0 for item in rows) == 50
+    assert sum(item.exchange_vehicles or 0 for item in rows) == 120
+

@@ -69,6 +69,7 @@ class SqliteRepository:
                 "002_operation_period.sql",
                 "003_daily_forecast.sql",
                 "004_machine_sorting.sql",
+                "005_hourly_unloading.sql",
             ):
                 migration_path = migrations_dir / migration_name
                 if not migration_path.exists():
@@ -85,6 +86,19 @@ class SqliteRepository:
                     volume INTEGER,
                     share_rate REAL,
                     PRIMARY KEY (report_date, stream, deck)
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS hourly_unloading (
+                    report_date TEXT NOT NULL,
+                    hour_slot TEXT NOT NULL,
+                    collection_vehicles INTEGER,
+                    quota_vehicles INTEGER,
+                    arrival_vehicles INTEGER,
+                    exchange_vehicles INTEGER,
+                    PRIMARY KEY (report_date, hour_slot)
                 )
                 """
             )
@@ -174,6 +188,8 @@ class SqliteRepository:
                         item.total_volume,
                     ),
                 )
+
+            self._insert_hourly_unloading(conn, report_date, report.hourly_unloading)
 
             conn.execute("DELETE FROM staffing WHERE report_date = ?", (report_date,))
             for item in report.staffing:
@@ -2326,6 +2342,7 @@ class SqliteRepository:
         file_path = self.get_report_file_path(report_date)
         tables = [
             "hourly_throughput",
+            "hourly_unloading",
             "staffing",
             "transport_office",
             "safety_summary",
@@ -2701,7 +2718,7 @@ class SqliteRepository:
             if not summary:
                 return {}
             metadata = conn.execute(
-                "SELECT report_format, day_type FROM report_metadata WHERE report_date = ?",
+                "SELECT report_format, day_type, file_path FROM report_metadata WHERE report_date = ?",
                 (report_date,),
             ).fetchone()
 
@@ -2714,6 +2731,11 @@ class SqliteRepository:
                 "SELECT * FROM staffing WHERE report_date = ?",
                 (report_date,),
             ).fetchall()
+            unloading = self._load_hourly_unloading(
+                conn,
+                report_date,
+                metadata["file_path"] if metadata else None,
+            )
             quota = conn.execute(
                 "SELECT * FROM quota_exchange WHERE report_date = ?",
                 (report_date,),
@@ -2789,6 +2811,7 @@ class SqliteRepository:
         peak_staff = max(staffing, key=lambda row: row["actual_staff"] or 0, default=None)
         ordered_hourly = self._order_hourly_rows(hourly)
         ordered_staffing = self._order_hourly_rows(staffing)
+        ordered_unloading = self._order_hourly_rows(unloading)
 
         return {
             "meta": {
@@ -2863,6 +2886,28 @@ class SqliteRepository:
                     "slot": peak_hour["hour_slot"] if peak_hour else None,
                     "value": peak_hour["total_volume"] if peak_hour else None,
                 },
+            },
+            "hourlyUnloading": {
+                "slots": list(HOUR_SLOTS),
+                "current": [
+                    {
+                        "slot": slot,
+                        "label": format_hour_label(slot),
+                        "collection": ordered_unloading[slot]["collection_vehicles"]
+                        if ordered_unloading[slot]
+                        else None,
+                        "quota": ordered_unloading[slot]["quota_vehicles"]
+                        if ordered_unloading[slot]
+                        else None,
+                        "arrival": ordered_unloading[slot]["arrival_vehicles"]
+                        if ordered_unloading[slot]
+                        else None,
+                        "exchange": ordered_unloading[slot]["exchange_vehicles"]
+                        if ordered_unloading[slot]
+                        else None,
+                    }
+                    for slot in HOUR_SLOTS
+                ],
             },
             "hourlyStaff": {
                 "slots": list(HOUR_SLOTS),
@@ -3189,6 +3234,64 @@ class SqliteRepository:
             "peakHourVolume": self._to_thousand(slot_avg.get(peak_slot)) if peak_slot else None,
             "sampleDays": len(report_dates),
         }
+
+    def _insert_hourly_unloading(self, conn, report_date: str, rows) -> None:
+        conn.execute("DELETE FROM hourly_unloading WHERE report_date = ?", (report_date,))
+        for item in rows or []:
+            conn.execute(
+                """
+                INSERT INTO hourly_unloading
+                (report_date, hour_slot, collection_vehicles, quota_vehicles,
+                 arrival_vehicles, exchange_vehicles)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    report_date,
+                    item.hour_slot,
+                    item.collection_vehicles,
+                    item.quota_vehicles,
+                    item.arrival_vehicles,
+                    item.exchange_vehicles,
+                ),
+            )
+
+    def _load_hourly_unloading(self, conn, report_date: str, file_path: str | None):
+        try:
+            rows = conn.execute(
+                "SELECT * FROM hourly_unloading WHERE report_date = ?",
+                (report_date,),
+            ).fetchall()
+        except Exception:
+            return []
+        if rows:
+            return rows
+        self._backfill_hourly_unloading(conn, report_date, file_path)
+        try:
+            return conn.execute(
+                "SELECT * FROM hourly_unloading WHERE report_date = ?",
+                (report_date,),
+            ).fetchall()
+        except Exception:
+            return []
+
+    def _backfill_hourly_unloading(self, conn, report_date: str, file_path: str | None) -> None:
+        if not file_path or not Path(file_path).exists():
+            return
+        try:
+            from datetime import date as date_cls
+
+            from infrastructure.pdf.extractors.daily_kpi import DailyKpiExtractor
+            from infrastructure.pdf.reader import PdfReader
+
+            document = PdfReader().read(file_path)
+            rows = DailyKpiExtractor().extract_hourly_unloading(
+                document,
+                date_cls.fromisoformat(report_date),
+            )
+            if rows:
+                self._insert_hourly_unloading(conn, report_date, rows)
+        except Exception:
+            return
 
     def _peak_hourly_row(self, rows: list[sqlite3.Row]) -> sqlite3.Row | None:
         active_rows = [row for row in rows if (row["total_volume"] or 0) > 0]

@@ -281,6 +281,79 @@ class DailyKpiExtractor:
 
         return hourly, staffing
 
+    def extract_hourly_unloading(self, document: PdfDocument, report_date: date):
+        from domain.entities import HourlyUnloading
+
+        text = document.pages[0].text if document.pages else ""
+        section = self._extract_hourly_section(text)
+        blob = f"{section}\n{self._hourly_table_text(document)}"
+
+        collection = self._align_unloading_row(self._match_unloading_row(blob, "collection"))
+        quota = self._align_unloading_row(self._match_unloading_row(blob, "quota"))
+        arrival = self._align_unloading_row(self._match_unloading_row(blob, "arrival"))
+        exchange = self._align_unloading_row(self._match_unloading_row(blob, "exchange"))
+
+        if not any(
+            value is not None
+            for row in (collection, quota, arrival, exchange)
+            for value in row
+        ):
+            return []
+
+        return [
+            HourlyUnloading(
+                report_date=report_date,
+                hour_slot=slot,
+                collection_vehicles=self._to_int(collection[idx] if idx < len(collection) else None),
+                quota_vehicles=self._to_int(quota[idx] if idx < len(quota) else None),
+                arrival_vehicles=self._to_int(arrival[idx] if idx < len(arrival) else None),
+                exchange_vehicles=self._to_int(exchange[idx] if idx < len(exchange) else None),
+            )
+            for idx, slot in enumerate(self.HOUR_SLOTS)
+        ]
+
+    _UNLOAD_NUMBER_RUN = r"((?:(?:-|\d+)[ \t]+){9,}(?:-|\d+))"
+
+    def _match_unloading_row(self, blob: str, row_type: str) -> str:
+        patterns = {
+            "collection": [rf"(?<![가-힣])수집[ \t]+{self._UNLOAD_NUMBER_RUN}"],
+            "quota": [
+                rf"하차[ \t]*쿼터[ \t]+{self._UNLOAD_NUMBER_RUN}",
+                rf"(?<![가-힣])쿼터[ \t]+{self._UNLOAD_NUMBER_RUN}",
+            ],
+            "arrival": [
+                rf"차량[ \t]*도착[ \t]+{self._UNLOAD_NUMBER_RUN}",
+                rf"(?<![가-힣])도착[ \t]+{self._UNLOAD_NUMBER_RUN}",
+            ],
+            "exchange": [
+                rf"단위\s*:\s*대\)[ \t]*교환[ \t]+{self._UNLOAD_NUMBER_RUN}",
+                rf"(?<![가-힣])교환[ \t]+{self._UNLOAD_NUMBER_RUN}",
+            ],
+        }
+        best = ""
+        best_count = 0
+        for pattern in patterns[row_type]:
+            for match in re.finditer(pattern, blob):
+                raw = match.group(1)
+                if not self._is_integer_unload_row(raw):
+                    continue
+                tokens = raw.split()
+                if len(tokens) > best_count:
+                    best = raw
+                    best_count = len(tokens)
+        return best
+
+    def _is_integer_unload_row(self, raw: str) -> bool:
+        tokens = raw.split()
+        if len(tokens) < 12:
+            return False
+        return all(token == "-" or re.fullmatch(r"\d+", token) for token in tokens)
+
+    def _align_unloading_row(self, raw: str) -> list[str | None]:
+        if not raw:
+            return [None] * len(self.HOUR_SLOTS)
+        return self._align_hour_values(self._parse_hour_row(raw))
+
     def _extract_hourly_section(self, text: str) -> str:
         for marker in ("시간대별 처리 및 인력투입 현황", "시간대별 처리"):
             idx = text.find(marker)

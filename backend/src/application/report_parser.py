@@ -35,6 +35,7 @@ class ReportParser:
         profile = self.format_detector.detect_profile(document)
         report_date, center_name, summary = self.daily_extractor.extract(document)
         hourly, staffing = self.daily_extractor.extract_hourly(document, report_date, profile=profile)
+        unloading = self.daily_extractor.extract_hourly_unloading(document, report_date)
 
         quota = None
         transport = []
@@ -65,6 +66,7 @@ class ReportParser:
             day_type=day_type,
             daily_summary=summary,
             hourly_throughput=hourly,
+            hourly_unloading=unloading,
             staffing=staffing,
             quota_exchange=quota,
             transport_offices=transport,
