@@ -21,7 +21,7 @@ export function DashboardLayout() {
   const location = useLocation();
   const { palette } = useTheme();
   const { isAdmin, logout } = useAdminAuth();
-  const { dates, selectedDate, setSelectedDate, compare, setCompareBasis, error } = useDashboardFilters();
+  const { dates, remainingDates, selectedDate, setSelectedDate, compare, setCompareBasis, error } = useDashboardFilters();
   const headerRequests = useRequestGeneration();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
     () => window.matchMedia("(max-width: 768px)").matches,
@@ -181,7 +181,12 @@ export function DashboardLayout() {
         ) : null}
         <div className="imc-sidebar-filters" style={{ marginTop: 28, paddingTop: 20, borderTop: `1px solid ${palette.border}` }}>
           <div style={{ color: palette.muted, fontSize: 12, marginBottom: 8 }}>조회 일자</div>
-          <ReportDateCalendar dates={dates} value={selectedDate} onChange={setSelectedDate} />
+          <ReportDateCalendar
+            dates={dates}
+            remainingDates={remainingDates}
+            value={selectedDate}
+            onChange={setSelectedDate}
+          />
           <div style={{ color: palette.muted, fontSize: 12, marginBottom: 8, marginTop: 12 }}>비교 기준</div>
           {COMPARE_OPTIONS.map((option) => (
             <label key={option.value} style={{ display: "block", marginBottom: 6, fontSize: 13 }}>

@@ -13,9 +13,17 @@ import {
 } from "../lib/dashboardCompare";
 import type { DashboardSummary } from "../types/dashboard";
 import type { VolumeTrendView } from "../types/volumeAnalysis";
+import type { ReportDateMeta } from "../types/reports";
+
+function remainingDatesFromMetadata(metadata: ReportDateMeta[]): string[] {
+  return metadata
+    .filter((item) => item.hasRemaining || (item.remainingVolume ?? 0) > 0)
+    .map((item) => item.reportDate);
+}
 
 type DashboardFilterContextValue = {
   dates: string[];
+  remainingDates: string[];
   selectedDate: string;
   setSelectedDate: (date: string) => void;
   compare: CompareBasis;
@@ -36,6 +44,7 @@ function summaryCacheKey(date: string, compareBasis: CompareBasis) {
 
 export function DashboardFilterProvider({ children }: { children: ReactNode }) {
   const [dates, setDates] = useState<string[]>([]);
+  const [remainingDates, setRemainingDates] = useState<string[]>([]);
   const [selectedDate, setSelectedDateState] = useState(readSelectedDate);
   const [compare, setCompare] = useState<CompareBasis>("prev_day");
   const [trendView, setTrendView] = useState<VolumeTrendView>("30d");
@@ -52,6 +61,7 @@ export function DashboardFilterProvider({ children }: { children: ReactNode }) {
     fetchReportDateList()
       .then((payload) => {
         setDates(payload.dates);
+        setRemainingDates(remainingDatesFromMetadata(payload.metadata));
         setSelectedDateState((current) => {
           if (current && payload.dates.includes(current)) {
             writeSelectedDate(current);
@@ -81,6 +91,7 @@ export function DashboardFilterProvider({ children }: { children: ReactNode }) {
   const refreshDates = useCallback(async () => {
     const payload = await fetchReportDateList();
     setDates(payload.dates);
+    setRemainingDates(remainingDatesFromMetadata(payload.metadata));
     setSelectedDateState((current) => {
       if (current && payload.dates.includes(current)) {
         writeSelectedDate(current);
@@ -124,6 +135,7 @@ export function DashboardFilterProvider({ children }: { children: ReactNode }) {
   const value = useMemo(
     () => ({
       dates,
+      remainingDates,
       selectedDate,
       setSelectedDate,
       compare,
@@ -137,6 +149,7 @@ export function DashboardFilterProvider({ children }: { children: ReactNode }) {
     }),
     [
       dates,
+      remainingDates,
       selectedDate,
       setSelectedDate,
       compare,

@@ -2223,9 +2223,14 @@ class SqliteRepository:
         with self._connect() as conn:
             rows = conn.execute(
                 """
-                SELECT report_date, report_format, day_type
-                FROM report_metadata
-                ORDER BY report_date
+                SELECT
+                    m.report_date,
+                    m.report_format,
+                    m.day_type,
+                    s.remaining_volume
+                FROM report_metadata m
+                LEFT JOIN daily_summary s ON s.report_date = m.report_date
+                ORDER BY m.report_date
                 """
             ).fetchall()
         return [
@@ -2233,6 +2238,8 @@ class SqliteRepository:
                 "reportDate": row["report_date"],
                 "format": row["report_format"],
                 "dayType": row["day_type"],
+                "remainingVolume": row["remaining_volume"],
+                "hasRemaining": (row["remaining_volume"] or 0) > 0,
             }
             for row in rows
         ]

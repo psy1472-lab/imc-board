@@ -23,6 +23,8 @@ export type ReportDateMeta = {
   reportDate: string;
   format?: string | null;
   dayType?: string | null;
+  remainingVolume?: number | null;
+  hasRemaining?: boolean;
 };
 
 export type UploadReportResult = {

@@ -28,13 +28,15 @@ function buildMonthGrid(year: number, month: number): Date[] {
 
 type ReportDateCalendarProps = {
   dates: string[];
+  remainingDates?: string[];
   value: string;
   onChange: (date: string) => void;
 };
 
-export function ReportDateCalendar({ dates, value, onChange }: ReportDateCalendarProps) {
+export function ReportDateCalendar({ dates, remainingDates = [], value, onChange }: ReportDateCalendarProps) {
   const { palette } = useTheme();
   const availableDates = useMemo(() => new Set(dates), [dates]);
+  const remainingDateSet = useMemo(() => new Set(remainingDates), [remainingDates]);
   const selectedDate = parseIsoDate(value);
   const [viewYear, setViewYear] = useState(() => selectedDate?.getFullYear() ?? new Date().getFullYear());
   const [viewMonth, setViewMonth] = useState(() => selectedDate?.getMonth() ?? new Date().getMonth());
@@ -136,9 +138,11 @@ export function ReportDateCalendar({ dates, value, onChange }: ReportDateCalenda
           const iso = toIsoDate(day);
           const inMonth = day.getMonth() === viewMonth;
           const hasReport = availableDates.has(iso);
+          const hasRemaining = remainingDateSet.has(iso);
           const isSelected = value === iso;
           const dayKind = resolveCalendarDayKind(iso, day.getDay());
           const dayColor = getDayColor(dayKind, palette, inMonth, hasReport);
+          const dateLabel = formatDateWithWeekday(iso);
 
           return (
             <button
@@ -146,7 +150,7 @@ export function ReportDateCalendar({ dates, value, onChange }: ReportDateCalenda
               type="button"
               disabled={!hasReport}
               onClick={() => onChange(iso)}
-              aria-label={formatDateWithWeekday(iso)}
+              aria-label={hasRemaining ? `${dateLabel}, 잔량 발생` : dateLabel}
               aria-pressed={isSelected}
               style={{
                 border: isSelected ? `1px solid ${palette.caution}` : "1px solid transparent",
@@ -171,11 +175,12 @@ export function ReportDateCalendar({ dates, value, onChange }: ReportDateCalenda
               {inMonth && hasReport ? (
                 <span
                   aria-hidden="true"
+                  title={hasRemaining ? "잔량 발생" : "정상"}
                   style={{
                     width: 5,
                     height: 5,
                     borderRadius: "50%",
-                    background: palette.normal,
+                    background: hasRemaining ? palette.warning : palette.normal,
                     flexShrink: 0,
                   }}
                 />
@@ -185,6 +190,32 @@ export function ReportDateCalendar({ dates, value, onChange }: ReportDateCalenda
             </button>
           );
         })}
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "center",
+          gap: 12,
+          marginTop: 8,
+          fontSize: 10,
+          color: palette.muted,
+        }}
+      >
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+          <span
+            aria-hidden="true"
+            style={{ width: 5, height: 5, borderRadius: "50%", background: palette.normal }}
+          />
+          정상
+        </span>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+          <span
+            aria-hidden="true"
+            style={{ width: 5, height: 5, borderRadius: "50%", background: palette.warning }}
+          />
+          잔량
+        </span>
       </div>
 
       {dates.length > 0 ? (
