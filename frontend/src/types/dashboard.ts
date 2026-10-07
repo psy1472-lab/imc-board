@@ -4,6 +4,7 @@ export type CompareInfo = {
   percent?: number | null;
   trend?: string;
   compareValue?: number | null;
+  difference?: number | null;
   minutes?: number;
 };
 

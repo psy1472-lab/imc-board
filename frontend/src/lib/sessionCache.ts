@@ -1,5 +1,5 @@
 const SELECTED_DATE_KEY = "imc.selectedDate";
-const SUMMARY_PREFIX = "imc.summary.";
+const SUMMARY_PREFIX = "imc.summary.v2.";
 const BRIEFING_PREFIX = "imc.briefing.core.";
 const MAX_JSON_ENTRIES = 4;
 

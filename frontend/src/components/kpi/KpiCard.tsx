@@ -15,11 +15,19 @@ const VOLUME_KEYS = new Set([
   "national_volume",
 ]);
 
+const LOWER_IS_BETTER = new Set(["remaining_volume"]);
+
 function toThousand(value: number | string | null | undefined) {
   if (value === null || value === undefined || value === "") return value;
   const num = typeof value === "string" ? Number(value) : value;
   if (Number.isNaN(num)) return value;
   return Math.round(num / 100) / 10;
+}
+
+function toNumeric(value: KpiItem["value"] | undefined): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const num = typeof value === "string" ? Number(value) : value;
+  return Number.isNaN(num) ? null : num;
 }
 
 function normalizeVolumeKpi(item: KpiItem): KpiItem {
@@ -38,6 +46,10 @@ function normalizeVolumeKpi(item: KpiItem): KpiItem {
             item.compare.compareValue === null || item.compare.compareValue === undefined
               ? item.compare.compareValue
               : (toThousand(item.compare.compareValue) as number | null | undefined),
+          difference:
+            item.compare.difference === null || item.compare.difference === undefined
+              ? item.compare.difference
+              : (toThousand(item.compare.difference) as number | null | undefined),
         }
       : item.compare,
   } satisfies KpiItem;
@@ -53,27 +65,51 @@ function formatKpiValue(value: KpiItem["value"], unit?: string) {
   return formatNumber(value);
 }
 
-function formatCompareValue(item: KpiItem): string {
-  const value = item.compare?.compareValue;
-  if (value === null || value === undefined) return "";
-
-  if (item.unit === "%") {
-    return `${value}%`;
+function formatSignedValue(value: number, unit?: string) {
+  const sign = value > 0 ? "+" : "";
+  if (unit === "%") {
+    return `${sign}${value.toFixed(1)}%p`;
   }
-  if (item.unit) {
-    return `${formatKpiValue(value, item.unit)}${item.unit}`;
+  if (unit === "천개") {
+    const formatted = Number.isInteger(value)
+      ? value.toLocaleString("ko-KR")
+      : value.toLocaleString("ko-KR", { maximumFractionDigits: 1 });
+    return `${sign}${formatted}${unit}`;
   }
-  return formatNumber(value);
+  const formatted = value.toLocaleString("ko-KR", { maximumFractionDigits: 1 });
+  return `${sign}${formatted}${unit ?? ""}`;
 }
 
 function buildCompareText(item: KpiItem): string | null {
-  if (item.compare?.percent !== undefined && item.compare?.percent !== null) {
-    const arrow = item.compare.trend === "DOWN" ? "▼" : "▲";
-    const percentText = `${arrow} ${Math.abs(item.compare.percent).toFixed(1)}%`;
-    const compareValueText = formatCompareValue(item);
-    return compareValueText ? `${percentText} (${compareValueText})` : percentText;
+  const compare = item.compare;
+  if (!compare) return null;
+
+  const current = toNumeric(item.value);
+  const prior = toNumeric(compare.compareValue);
+  const diff = current !== null && prior !== null ? current - prior : toNumeric(compare.difference);
+  const trend = compare.trend ?? (diff !== null ? (diff > 0 ? "UP" : diff < 0 ? "DOWN" : "STABLE") : undefined);
+  const arrow = trend === "DOWN" ? "▼" : trend === "UP" ? "▲" : "─";
+
+  if (diff === null) {
+    if (compare.percent === undefined || compare.percent === null) return null;
+    const percent = Number(compare.percent);
+    return `${arrow} ${percent > 0 ? "+" : ""}${percent.toFixed(1)}%`;
   }
-  return null;
+
+  const diffText = formatSignedValue(diff, item.unit);
+  if (prior === 0 || compare.percent === undefined || compare.percent === null) {
+    return `${arrow} ${diffText}`;
+  }
+  const percent = Number(compare.percent);
+  const percentText = `${percent > 0 ? "+" : ""}${percent.toFixed(1)}%`;
+  return `${arrow} ${diffText} (${percentText})`;
+}
+
+function compareIsFavorable(item: KpiItem): boolean {
+  const trend = item.compare?.trend;
+  if (!trend || trend === "STABLE") return true;
+  const higherIsBetter = !LOWER_IS_BETTER.has(item.key);
+  return higherIsBetter ? trend === "UP" : trend === "DOWN";
 }
 
 export function KpiCard({ item }: Props) {
@@ -131,7 +167,7 @@ export function KpiCard({ item }: Props) {
         <div
           className="imc-kpi-card__compare"
           style={{
-            color: kpi.status ? severityColor(kpi.status, palette) : palette.normal,
+            color: compareIsFavorable(kpi) ? palette.normal : palette.critical,
           }}
         >
           {compareText}

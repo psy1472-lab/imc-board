@@ -374,6 +374,7 @@ class SqliteRepository:
             "dispatch_volume",
             "arrival_volume",
             "national_volume",
+            "remaining_volume",
             "productivity",
             "ips_rate",
         ]
@@ -389,9 +390,20 @@ class SqliteRepository:
         current_value: float | int | None,
         compare_value: float | int | None,
     ) -> dict | None:
-        if current_value is None or compare_value in (None, 0):
+        if current_value is None or compare_value is None:
             return None
         difference = current_value - compare_value
+        if compare_value == 0:
+            if current_value == 0:
+                return None
+            trend = "UP" if difference > 0 else "DOWN"
+            return {
+                "current_value": current_value,
+                "compare_value": compare_value,
+                "difference": difference,
+                "difference_percent": None,
+                "trend": trend,
+            }
         difference_percent = (difference / compare_value) * 100
         trend = "UP" if difference > 0 else "DOWN" if difference < 0 else "STABLE"
         return {
@@ -413,19 +425,8 @@ class SqliteRepository:
             return {}
 
         if compare_basis == "prev_day":
-            stored = {
-                row["metric_name"]: row
-                for row in conn.execute(
-                    """
-                    SELECT * FROM kpi_comparison
-                    WHERE report_date = ? AND compare_basis = 'prev_day'
-                    """,
-                    (report_date,),
-                ).fetchall()
-            }
-            if stored:
-                return stored
-
+            # Always compare against the latest previous daily_summary.
+            # Stored kpi_comparison can be stale when reports are ingested out of order.
             prev = conn.execute(
                 """
                 SELECT * FROM daily_summary
@@ -436,11 +437,12 @@ class SqliteRepository:
             ).fetchone()
             if not prev:
                 return {}
-            return {
-                metric: self._build_comparison(current[metric], prev[metric])
-                for metric in self._comparison_metrics()
-                if self._build_comparison(current[metric], prev[metric])
-            }
+            comparisons: dict[str, dict] = {}
+            for metric in self._comparison_metrics():
+                built = self._build_comparison(current[metric], prev[metric])
+                if built:
+                    comparisons[metric] = built
+            return comparisons
 
         if compare_basis in {"7d_avg", "30d_avg"}:
             limit = 7 if compare_basis == "7d_avg" else 30
@@ -2796,31 +2798,31 @@ class SqliteRepository:
             ).fetchall()
             machine_rows = self._fetch_machine_sorting_rows(conn, report_date)
 
-        def compare_for(metric: str):
+        def compare_for(metric: str, *, as_thousand: bool = False):
             row = comparisons.get(metric)
             if not row:
                 return None
-            compare_value = row["compare_value"] if isinstance(row, dict) else row["compare_value"]
-            difference_percent = (
-                row["difference_percent"] if isinstance(row, dict) else row["difference_percent"]
-            )
-            trend = row["trend"] if isinstance(row, dict) else row["trend"]
+            current_value = summary[metric]
+            compare_value = row["compare_value"]
+            if as_thousand:
+                current_value = to_thousand(current_value)
+                compare_value = to_thousand(compare_value)
+            built = self._build_comparison(current_value, compare_value)
+            if not built:
+                return None
+            difference_percent = built["difference_percent"]
             return {
                 "percent": round(difference_percent, 1) if difference_percent is not None else None,
-                "trend": trend,
-                "compareValue": compare_value,
+                "trend": built["trend"],
+                "compareValue": built["compare_value"],
+                "difference": built["difference"],
             }
 
         def to_thousand(value: int | float | None) -> float | None:
             return self._to_thousand(value)
 
         def compare_for_thousand(metric: str):
-            compare = compare_for(metric)
-            if not compare:
-                return None
-            if compare["compareValue"] is not None:
-                compare["compareValue"] = to_thousand(compare["compareValue"])
-            return compare
+            return compare_for(metric, as_thousand=True)
 
         def volume_kpi(key: str, label: str, value: int | None, **extra):
             return {
@@ -2872,6 +2874,7 @@ class SqliteRepository:
                         "잔량",
                         summary["remaining_volume"],
                     ),
+                    "compare": compare_for_thousand("remaining_volume"),
                 },
                 {
                     "key": "productivity",
