@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from domain.hour_slots import HOUR_SLOTS, hour_slot_order, normalize_hour_slot
+from domain.hour_slots import HOUR_SLOTS, format_hour_label, hour_slot_order, normalize_hour_slot
 
 UNLOADING_COMPLIANCE_RULES = (
     ("collection_vehicles", "수집차량", "22"),
@@ -26,7 +26,7 @@ class UnloadingCompliance:
 def delayed_hour_slots(deadline_slot: str) -> list[str]:
     deadline = normalize_hour_slot(deadline_slot)
     cutoff = hour_slot_order(deadline)
-    return [slot for slot in HOUR_SLOTS if hour_slot_order(slot) > cutoff]
+    return [slot for slot in HOUR_SLOTS if hour_slot_order(slot) >= cutoff]
 
 
 def _row_slot(row) -> str:
@@ -68,8 +68,8 @@ def compute_unloading_compliance(rows) -> list[UnloadingCompliance]:
         on_time = total - delayed
         rate = round((on_time / total) * 100, 1)
         severity = "WARNING" if delayed > 0 else "NORMAL"
-        deadline_label = f"{normalize_hour_slot(deadline_slot)}시 기준"
-        message = f"{label} 도착시간 준수율 {rate}% (지연 {delayed}/{total}대, {deadline_label})"
+        deadline_label = f"{format_hour_label(deadline_slot)} 이후 도착"
+        message = f"{label} 도착시간 준수율 {rate}% ({deadline_label} 지연 {delayed}/{total}대)"
         items.append(
             UnloadingCompliance(
                 column=column,

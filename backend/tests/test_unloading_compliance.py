@@ -16,10 +16,10 @@ def _row(slot, collection=0, quota=0, exchange=0):
 
 
 class UnloadingComplianceTests(unittest.TestCase):
-    def test_delayed_slots_are_after_deadline(self):
-        self.assertEqual(delayed_hour_slots("22"), ["23", "00", "01", "02", "03", "04", "05", "06"])
-        self.assertEqual(delayed_hour_slots("23"), ["00", "01", "02", "03", "04", "05", "06"])
-        self.assertEqual(delayed_hour_slots("02"), ["03", "04", "05", "06"])
+    def test_delayed_slots_include_deadline_hour(self):
+        self.assertEqual(delayed_hour_slots("22"), ["22", "23", "00", "01", "02", "03", "04", "05", "06"])
+        self.assertEqual(delayed_hour_slots("23"), ["23", "00", "01", "02", "03", "04", "05", "06"])
+        self.assertEqual(delayed_hour_slots("02"), ["02", "03", "04", "05", "06"])
 
     def test_collection_deadline_22(self):
         rows = [
@@ -31,11 +31,10 @@ class UnloadingComplianceTests(unittest.TestCase):
         ]
         item = next(item for item in compute_unloading_compliance(rows) if item.column == "collection_vehicles")
         self.assertEqual(item.total, 110)
-        self.assertEqual(item.delayed, 10)
-        self.assertEqual(item.rate, 90.9)
+        self.assertEqual(item.delayed, 60)
+        self.assertEqual(item.rate, 45.5)
         self.assertEqual(item.severity, "WARNING")
-        self.assertIn("지연 10/110대", item.message)
-        self.assertIn("22시 기준", item.message)
+        self.assertIn("22~ 이후 도착 지연 60/110대", item.message)
 
     def test_quota_and_exchange_deadlines(self):
         rows = [
@@ -46,13 +45,13 @@ class UnloadingComplianceTests(unittest.TestCase):
             _row("03", quota=0, exchange=4),
         ]
         items = {item.column: item for item in compute_unloading_compliance(rows)}
-        self.assertEqual(items["quota_vehicles"].delayed, 6)
+        self.assertEqual(items["quota_vehicles"].delayed, 26)
         self.assertEqual(items["quota_vehicles"].total, 36)
-        self.assertIn("23시 기준", items["quota_vehicles"].message)
-        self.assertEqual(items["exchange_vehicles"].delayed, 4)
+        self.assertIn("23~ 이후 도착 지연 26/36대", items["quota_vehicles"].message)
+        self.assertEqual(items["exchange_vehicles"].delayed, 14)
         self.assertEqual(items["exchange_vehicles"].total, 20)
-        self.assertEqual(items["exchange_vehicles"].rate, 80.0)
-        self.assertIn("02시 기준", items["exchange_vehicles"].message)
+        self.assertEqual(items["exchange_vehicles"].rate, 30.0)
+        self.assertIn("02~ 이후 도착 지연 14/20대", items["exchange_vehicles"].message)
 
     def test_full_compliance_is_normal(self):
         rows = [_row("18", collection=10, quota=8, exchange=3), _row("21", collection=5, quota=2, exchange=1)]
