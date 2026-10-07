@@ -75,7 +75,7 @@ class ReportParser:
             safety_categories=safety_categories,
             safety_incidents=safety_incidents,
             anomalies=self._build_anomalies(
-                report_date, summary, quota, transport, sorting, safety_incidents, profile
+                report_date, summary, quota, transport, sorting, safety_incidents, profile, unloading
             ),
         )
         report.validation_logs = self.validator.validate(report)
@@ -98,12 +98,14 @@ class ReportParser:
         sorting,
         safety_incidents,
         profile: FormatProfile,
+        unloading=None,
     ) -> list[Anomaly]:
         from domain.transport_quota import (
             is_arrival_after_23,
             office_count_volume_text,
             quota_overage,
         )
+        from domain.unloading_compliance import compute_unloading_compliance
 
         anomalies: list[Anomaly] = []
 
@@ -163,6 +165,8 @@ class ReportParser:
                 office_count_volume_text("지연(23시초과) 집중국", len(delayed_offices), delayed_volume),
             )
         )
+        for item in compute_unloading_compliance(unloading or []):
+            anomalies.append(Anomaly(report_date, "transport", item.severity, item.message))
 
         if sorting and sorting.ips_rate is not None:
             if sorting.ips_rate >= 97:

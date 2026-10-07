@@ -21,7 +21,7 @@ const API_BASE = (import.meta.env.VITE_API_BASE ?? "").replace(/\/$/, "");
 async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   const url = `${API_BASE}${path}`;
   try {
-    return await fetch(url, init);
+    return await fetch(url, { cache: "no-store", ...init });
   } catch {
     if (!API_BASE && import.meta.env.PROD) {
       throw new Error(

@@ -581,3 +581,38 @@ def test_hourly_unloading_vehicles_from_standard_table():
     assert sum(item.arrival_vehicles or 0 for item in rows) == 50
     assert sum(item.exchange_vehicles or 0 for item in rows) == 120
 
+
+HOURLY_UNLOADING_OMITTED_06_SNIPPET = """
+시간대별 처리 및 인력투입 현황 (평균 시간당 처리량(19시~00시) : 3.3만개)
+구 분 ~18 18~ 19~ 20~ 21~ 22~ 23~ 0~ 1~ 2~ 3~ 4~ 5~ 6~ 합계
+수집 40 36 27 25 13 7 3 1 - - - - - 152
+하차 쿼터 2 2 3 5 7 13 30 21 4 - - - - 87 -
+차량 도착 1 2 - - 2 1 - 3 17 27 1 - - 54 -
+(단위:대) 교환 1 - 1 - 3 14 23 24 26 22 - - - 114
+계 44 40 31 33 28 35 56 49 48 53 1 - - 418
+"""
+
+
+def test_hourly_unloading_strips_total_when_06_dash_is_omitted():
+    document = PdfDocument(
+        path="26.09.09.pdf",
+        pages=[PdfPage(index=0, text=HOURLY_UNLOADING_OMITTED_06_SNIPPET, tables=[])],
+    )
+    rows = DailyKpiExtractor().extract_hourly_unloading(document, date(2026, 9, 9))
+    by_slot = {item.hour_slot: item for item in rows}
+    assert by_slot["~18"].collection_vehicles == 40
+    assert by_slot["18"].collection_vehicles == 36
+    assert by_slot["~18"].quota_vehicles == 2
+    assert by_slot["~18"].arrival_vehicles == 1
+    assert by_slot["~18"].exchange_vehicles == 1
+    assert by_slot["02"].arrival_vehicles == 27
+    assert by_slot["02"].exchange_vehicles == 22
+    assert by_slot["06"].collection_vehicles is None
+    assert by_slot["06"].quota_vehicles is None
+    assert by_slot["06"].arrival_vehicles is None
+    assert by_slot["06"].exchange_vehicles is None
+    assert sum(item.collection_vehicles or 0 for item in rows) == 152
+    assert sum(item.quota_vehicles or 0 for item in rows) == 87
+    assert sum(item.arrival_vehicles or 0 for item in rows) == 54
+    assert sum(item.exchange_vehicles or 0 for item in rows) == 114
+

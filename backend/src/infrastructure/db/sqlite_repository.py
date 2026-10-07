@@ -24,6 +24,7 @@ from domain.transport_quota import (
     quota_overage,
     quota_status,
 )
+from domain.unloading_compliance import unloading_compliance_messages
 from domain.volume_forecast import forecast_target_note_for, resolve_forecast_target_date
 from domain.entities import ParsedReport
 from domain.hour_slots import HOUR_SLOTS, format_hour_label, normalize_hour_slot
@@ -1839,11 +1840,20 @@ class SqliteRepository:
             },
         ]
 
+    def _is_replaced_transport_message(self, message: str) -> bool:
+        text = message or ""
+        return (
+            text.startswith("쿼터 초과 집중국")
+            or text.startswith("지연(23시초과) 집중국")
+            or "도착시간 준수율" in text
+        )
+
     def _merge_transport_anomalies(
         self,
         anomalies: list[sqlite3.Row] | list[dict],
         quota: sqlite3.Row | None,
         offices: list[sqlite3.Row],
+        unloading=None,
     ) -> list[dict]:
         serialized = [
             item if isinstance(item, dict) else self._serialize_anomaly_row(item)
@@ -1853,12 +1863,10 @@ class SqliteRepository:
             item
             for item in serialized
             if item.get("category") != "transport"
-            or (
-                "쿼터" not in str(item.get("message") or "")
-                and "지연" not in str(item.get("message") or "")
-            )
+            or not self._is_replaced_transport_message(str(item.get("message") or ""))
         ]
         live = self._live_transport_anomalies(quota, offices)
+        live.extend(unloading_compliance_messages(unloading or []))
         volume = [item for item in kept if item.get("category") == "volume"]
         rest = [item for item in kept if item.get("category") != "volume"]
         return [*volume, *live, *rest]
@@ -2075,6 +2083,15 @@ class SqliteRepository:
                 "SELECT * FROM transport_office WHERE report_date = ?",
                 (report_date,),
             ).fetchall()
+            metadata = conn.execute(
+                "SELECT file_path FROM report_metadata WHERE report_date = ?",
+                (report_date,),
+            ).fetchone()
+            unloading = self._load_hourly_unloading(
+                conn,
+                report_date,
+                metadata["file_path"] if metadata else None,
+            )
             trend_date_rows = conn.execute(
                 """
                 SELECT report_date
@@ -2127,7 +2144,7 @@ class SqliteRepository:
                 "incidentCount": len(incidents),
                 "incidents": [self._serialize_safety_incident_row(row) for row in incidents],
             },
-            "anomalies": self._merge_transport_anomalies(anomalies, quota, offices),
+            "anomalies": self._merge_transport_anomalies(anomalies, quota, offices, unloading),
             "benchmarks": {
                 "prevDay": self._safety_benchmark(incident_map, warning_map, pass_rate_map, prev_day_dates),
                 "avg7d": self._safety_benchmark(incident_map, warning_map, pass_rate_map, avg7),
@@ -2939,7 +2956,7 @@ class SqliteRepository:
                     "value": peak_staff["actual_staff"] if peak_staff else None,
                 },
             },
-            "anomalies": self._merge_transport_anomalies(anomalies, quota, offices),
+            "anomalies": self._merge_transport_anomalies(anomalies, quota, offices, unloading),
             "equipment": {
                 "sortingRate": sorting["sorting_rate"] if sorting else None,
                 "ipsRate": sorting["ips_rate"] if sorting else None,
@@ -3270,6 +3287,15 @@ class SqliteRepository:
             ).fetchall()
         except Exception:
             return []
+        if rows and self._unloading_has_leaked_total(rows):
+            self._backfill_hourly_unloading(conn, report_date, file_path)
+            try:
+                rows = conn.execute(
+                    "SELECT * FROM hourly_unloading WHERE report_date = ?",
+                    (report_date,),
+                ).fetchall()
+            except Exception:
+                return rows
         if rows:
             return rows
         self._backfill_hourly_unloading(conn, report_date, file_path)
@@ -3281,8 +3307,28 @@ class SqliteRepository:
         except Exception:
             return []
 
+    def _unloading_has_leaked_total(self, rows) -> bool:
+        slot_06 = next((row for row in rows if str(row["hour_slot"]) == "06"), None)
+        if slot_06 is None:
+            return False
+        others = [row for row in rows if str(row["hour_slot"]) != "06"]
+        for column in (
+            "collection_vehicles",
+            "quota_vehicles",
+            "arrival_vehicles",
+            "exchange_vehicles",
+        ):
+            leaked = slot_06[column]
+            if not leaked:
+                continue
+            hour_sum = sum(row[column] or 0 for row in others)
+            if hour_sum and leaked == hour_sum:
+                return True
+        return False
+
     def _backfill_hourly_unloading(self, conn, report_date: str, file_path: str | None) -> None:
-        if not file_path or not Path(file_path).exists():
+        resolved = Path(file_path) if file_path and Path(file_path).exists() else self._resolve_report_pdf(report_date)
+        if not resolved:
             return
         try:
             from datetime import date as date_cls
@@ -3290,13 +3336,14 @@ class SqliteRepository:
             from infrastructure.pdf.extractors.daily_kpi import DailyKpiExtractor
             from infrastructure.pdf.reader import PdfReader
 
-            document = PdfReader().read(file_path)
+            document = PdfReader().read(str(resolved))
             rows = DailyKpiExtractor().extract_hourly_unloading(
                 document,
                 date_cls.fromisoformat(report_date),
             )
             if rows:
                 self._insert_hourly_unloading(conn, report_date, rows)
+                conn.commit()
         except Exception:
             return
 

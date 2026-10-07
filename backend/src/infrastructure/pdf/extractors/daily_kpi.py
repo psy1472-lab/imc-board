@@ -352,7 +352,26 @@ class DailyKpiExtractor:
     def _align_unloading_row(self, raw: str) -> list[str | None]:
         if not raw:
             return [None] * len(self.HOUR_SLOTS)
-        return self._align_hour_values(self._parse_hour_row(raw))
+        values = self._parse_hour_row(raw)
+        while values and values[-1] is None:
+            values = values[:-1]
+        if self._is_unloading_row_total(values):
+            values = values[:-1]
+        slot_count = len(self.HOUR_SLOTS)
+        if len(values) > slot_count:
+            values = values[:slot_count]
+        if len(values) < slot_count:
+            values = values + [None] * (slot_count - len(values))
+        return values
+
+    def _is_unloading_row_total(self, values: list[str | None]) -> bool:
+        if len(values) < 2 or values[-1] is None:
+            return False
+        last = self._to_int(values[-1])
+        if last is None:
+            return False
+        hours = [self._to_int(value) or 0 for value in values[:-1] if value is not None]
+        return bool(hours) and last == sum(hours)
 
     def _extract_hourly_section(self, text: str) -> str:
         for marker in ("시간대별 처리 및 인력투입 현황", "시간대별 처리"):
