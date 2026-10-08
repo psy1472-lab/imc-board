@@ -167,6 +167,28 @@ select, input {
   line-height: 1.2;
 }
 
+.imc-main-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.imc-main-header__link {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-weight: 600;
+  font-size: 14px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.imc-main-header__link:hover {
+  text-decoration: underline;
+}
+
 .imc-kpi-card {
   border-radius: 12px;
   padding: 16px 18px;

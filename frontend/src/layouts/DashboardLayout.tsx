@@ -234,7 +234,23 @@ export function DashboardLayout() {
               />
             ))}
           </div>
-          <ThemeToggle />
+          <div className="imc-main-header__actions">
+            <a
+              className="imc-main-header__link"
+              href="https://imc-transport.vercel.app"
+              target="_blank"
+              rel="noopener noreferrer"
+              title="운송종합관제 imc-transport.vercel.app"
+              style={{
+                background: palette.panelAlt,
+                color: palette.caution,
+                border: `1px solid ${palette.border}`,
+              }}
+            >
+              운송종합관제
+            </a>
+            <ThemeToggle />
+          </div>
         </header>
         {error ? <div style={{ color: palette.critical, marginBottom: 12 }}>{error}</div> : null}
         <Outlet />
