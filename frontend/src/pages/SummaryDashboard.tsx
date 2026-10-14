@@ -149,15 +149,16 @@ export default function SummaryDashboard() {
         </Panel>
       </section>
 
-      <section className="imc-summary-row-3">
-        <div className="imc-summary-equipment-stack">
-          <Panel title="설비(구분기) 현황">
-            <EquipmentGaugePanel equipment={data.equipment} />
-          </Panel>
-          <Panel title="기계구분율">
-            <MachineSortingPieChart data={data.machineSorting} />
-          </Panel>
-        </div>
+      <section className="imc-summary-row-2">
+        <Panel title="설비(구분기) 현황">
+          <EquipmentGaugePanel equipment={data.equipment} />
+        </Panel>
+        <Panel title="기계구분율">
+          <MachineSortingPieChart data={data.machineSorting} />
+        </Panel>
+      </section>
+
+      <section className="imc-summary-row-2 imc-summary-row-safety">
         <Panel className="imc-summary-safety" title="안전 점검 현황">
           <SafetyCategoryGrid safety={data.safety} displayMode="summary" />
         </Panel>
