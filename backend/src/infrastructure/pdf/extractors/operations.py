@@ -41,7 +41,11 @@ class QuotaExchangeExtractor:
         section = section_match.group(1) if section_match else ""
         if not section:
             return None, None, None
-        match = re.search(rf"(?:^|\n|[-\s]){label}\s+([-\d]+(?:\s+[-\d]+)*)", section)
+        cell = r"(?:\+\d+|-\d+|\d+|-)"
+        match = re.search(
+            rf"(?:^|\n|[-\s]){label}\s+({cell}(?:\s+{cell})*)",
+            section,
+        )
         if not match:
             return None, None, None
 

@@ -445,6 +445,30 @@ def test_extract_maritime_offices_with_dash_quota():
     assert by_name["평택해상"].status == "WARNING"
 
 
+def test_parse_quota_row_with_explicit_plus_overage():
+    from infrastructure.pdf.extractors.operations import QuotaExchangeExtractor
+
+    text = (
+        "교환 및 수지 쿼 터 준 수 현 황\n"
+        "②사전협의 ③쿼터 ④초과 ⑦총 하차대수\n"
+        "구분 ①기준대수 ⑤제주D+2 ⑥기타(조달센터 등)\n"
+        "추가 소계 (③-①+②) (③+⑤+⑥)\n"
+        "- 쿼터 90 3 93 +3 1 1 95\n"
+        "교환 129 - 117 -12\n"
+        "배분 및 교환 마지막 운송편 발송 현황\n"
+    )
+    extractor = QuotaExchangeExtractor()
+    standard, actual, difference = extractor._parse_quota_row(text, "쿼터")
+    assert standard == 90
+    assert actual == 95
+    assert difference == 3
+
+    exchange_standard, exchange_actual, exchange_difference = extractor._parse_quota_row(text, "교환")
+    assert exchange_standard == 129
+    assert exchange_actual == 117
+    assert exchange_difference == -12
+
+
 def test_parse_quota_row_with_dash_cells():
     from infrastructure.pdf.extractors.operations import QuotaExchangeExtractor
 
