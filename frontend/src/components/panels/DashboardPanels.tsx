@@ -244,24 +244,16 @@ function maskPersonalName(name: string) {
   return `${trimmed[0]}${"*".repeat(trimmed.length - 2)}${trimmed[trimmed.length - 1]}`;
 }
 
-function formatIncidentNarrative(
-  item: DashboardSummary["safety"]["incidents"][number],
-  displayMode: "summary" | "full",
-) {
-  const text = item.description ?? item.summary ?? "재해경위 정보 없음";
-  if (displayMode === "full" || text.length <= 60) {
-    return text;
-  }
-  const trimmed = text.slice(0, 60);
-  const lastSpace = trimmed.lastIndexOf(" ");
-  return `${lastSpace > 0 ? trimmed.slice(0, lastSpace) : trimmed}…`;
+function formatIncidentNarrative(item: DashboardSummary["safety"]["incidents"][number]) {
+  return item.description ?? item.summary ?? "재해경위 정보 없음";
 }
 
-export function SafetyCategoryGrid({ safety }: SafetyProps) {
+export function SafetyCategoryGrid({ safety, displayMode = "full" }: SafetyProps) {
   const { palette } = useTheme();
+  const isSummary = displayMode === "summary";
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 }}>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: isSummary ? 12 : 10 }}>
       {safety.categories.map((item) => (
         <div
           key={item.key}
@@ -269,13 +261,29 @@ export function SafetyCategoryGrid({ safety }: SafetyProps) {
             background: palette.panelAlt,
             border: `1px solid ${palette.border}`,
             borderRadius: 10,
-            padding: "12px 8px",
+            padding: isSummary ? "14px 12px" : "12px 8px",
             textAlign: "center",
-            whiteSpace: "nowrap",
+            minWidth: 0,
           }}
         >
-          <div style={{ color: palette.muted, fontSize: 12 }}>{item.label}</div>
-          <div style={{ marginTop: 8, color: palette.normal }}>
+          <div
+            style={{
+              color: palette.muted,
+              fontSize: isSummary ? 14 : 12,
+              lineHeight: 1.35,
+              wordBreak: "keep-all",
+            }}
+          >
+            {item.label}
+          </div>
+          <div
+            style={{
+              marginTop: isSummary ? 10 : 8,
+              color: palette.normal,
+              fontSize: isSummary ? 16 : 14,
+              fontWeight: 700,
+            }}
+          >
             {item.passed}/{item.total} 양호
           </div>
         </div>
@@ -294,14 +302,14 @@ export function SafetyIncidentPanel({ safety, displayMode = "summary" }: SafetyP
       <div
         style={{
           color: incidentCount > 0 ? palette.warning : palette.normal,
-          fontWeight: 600,
-          fontSize: 15,
+          fontWeight: 700,
+          fontSize: isFullDisplay ? 15 : 16,
         }}
       >
         안전사고 {incidentCount}건
       </div>
       {incidentCount > 0 ? (
-        <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
+        <div style={{ marginTop: 12, display: "grid", gap: isFullDisplay ? 8 : 10 }}>
           {safety.incidents.map((item, index) => (
             <div
               key={`${item.name ?? "incident"}-${index}`}
@@ -310,11 +318,11 @@ export function SafetyIncidentPanel({ safety, displayMode = "summary" }: SafetyP
                 border: `1px solid ${palette.border}`,
                 borderLeft: `4px solid ${palette.warning}`,
                 borderRadius: 8,
-                padding: "10px 12px",
-                fontSize: 12,
+                padding: isFullDisplay ? "10px 12px" : "12px 14px",
+                fontSize: isFullDisplay ? 12 : 14,
               }}
             >
-              <div style={{ fontWeight: 600, marginBottom: 4 }}>
+              <div style={{ fontWeight: 700, marginBottom: 6, lineHeight: 1.4 }}>
                 {[item.department, item.name ? `${maskPersonalName(item.name)}(${item.gender ?? ""})` : null, item.occurrenceTime]
                   .filter(Boolean)
                   .join(" · ")}
@@ -322,14 +330,16 @@ export function SafetyIncidentPanel({ safety, displayMode = "summary" }: SafetyP
               <div
                 style={{
                   color: palette.muted,
-                  lineHeight: isFullDisplay ? 1.6 : 1.5,
-                  whiteSpace: isFullDisplay ? "pre-wrap" : "nowrap",
-                  wordBreak: isFullDisplay ? "break-word" : undefined,
+                  lineHeight: 1.55,
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "keep-all",
                   overflow: isFullDisplay ? undefined : "hidden",
-                  textOverflow: isFullDisplay ? undefined : "ellipsis",
+                  display: isFullDisplay ? undefined : "-webkit-box",
+                  WebkitLineClamp: isFullDisplay ? undefined : 3,
+                  WebkitBoxOrient: isFullDisplay ? undefined : "vertical",
                 }}
               >
-                {formatIncidentNarrative(item, displayMode)}
+                {formatIncidentNarrative(item)}
               </div>
             </div>
           ))}

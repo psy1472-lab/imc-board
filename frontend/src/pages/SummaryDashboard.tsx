@@ -158,11 +158,11 @@ export default function SummaryDashboard() {
             <MachineSortingPieChart data={data.machineSorting} />
           </Panel>
         </div>
-        <Panel title="안전 점검 현황">
-          <SafetyCategoryGrid safety={data.safety} />
+        <Panel className="imc-summary-safety" title="안전 점검 현황">
+          <SafetyCategoryGrid safety={data.safety} displayMode="summary" />
         </Panel>
-        <Panel title="재해 현황">
-          <SafetyIncidentPanel safety={data.safety} />
+        <Panel className="imc-summary-incident" title="재해 현황">
+          <SafetyIncidentPanel safety={data.safety} displayMode="summary" />
         </Panel>
       </section>
 
