@@ -53,6 +53,9 @@ class QuotaExchangeExtractor:
         reconciled = self._reconcile_unloading_columns(parts)
         if reconciled is not None:
             return reconciled
+        triple = self._reconcile_three_columns(parts)
+        if triple is not None:
+            return triple
         if len(parts) >= 7:
             standard = to_int_or_zero(parts[0])
             # 기준 … 초과 계 회차: 마지막이 회차(0 근처)이고 계-기준=초과
@@ -105,6 +108,18 @@ class QuotaExchangeExtractor:
         if arrived + jeju + extra != total:
             return None
         return standard, arrived, overage
+
+    @staticmethod
+    def _reconcile_three_columns(parts: list[str]) -> tuple[int, int, int] | None:
+        """기준 실제 차이. 예: 교환 129 114 -15."""
+        if len(parts) != 3:
+            return None
+        standard, second, third = (to_int_or_zero(part) for part in parts)
+        if second - standard == third:
+            return standard, second, third
+        if third - standard == second:
+            return standard, third, second
+        return None
 
 
 class TransportExtractor:
