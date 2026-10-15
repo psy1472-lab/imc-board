@@ -2273,6 +2273,30 @@ class SqliteRepository:
             return None
         return row["ingested_at"]
 
+    def get_dashboard_cache_revision(self, report_date: str) -> str:
+        """요약 응답 캐시 키. 재수집 시각과 별개로 쿼터·교환 값이 바뀌면 달라진다."""
+        with self._connect() as conn:
+            quota = conn.execute(
+                """
+                SELECT quarter_standard, quarter_actual, exchange_standard,
+                       exchange_actual, exchange_remaining
+                FROM quota_exchange
+                WHERE report_date = ?
+                """,
+                (report_date,),
+            ).fetchone()
+        if not quota:
+            return "quota:none"
+        parts = [
+            quota["quarter_standard"],
+            quota["quarter_actual"],
+            quota["exchange_standard"],
+            quota["exchange_actual"],
+            quota["exchange_remaining"],
+        ]
+        rendered = ",".join("" if value is None else str(value) for value in parts)
+        return f"quota:{rendered}"
+
     def get_dashboard_header(self, report_date: str) -> dict | None:
         with self._connect() as conn:
             summary = conn.execute(

@@ -333,7 +333,8 @@ def dashboard_summary(
     compare: str = Query("prev_day"),
 ):
     ingested_at = repository.get_report_ingested_at(date)
-    etag = build_report_etag(date, f"{compare}:live-prev-kpi", ingested_at)
+    revision = repository.get_dashboard_cache_revision(date)
+    etag = build_report_etag(date, f"{compare}:live-prev-kpi:{revision}", ingested_at)
     if if_none_match_matches(request.headers.get("if-none-match"), etag):
         return Response(
             status_code=304,
