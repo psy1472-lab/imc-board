@@ -6,7 +6,13 @@ import os
 import unittest
 from decimal import Decimal
 
-from infrastructure.db.postgres_adapter import _as_json_param, _normalize_value, adapt_params, translate_sql
+from infrastructure.db.postgres_adapter import (
+    PgConnection,
+    _as_json_param,
+    _normalize_value,
+    adapt_params,
+    translate_sql,
+)
 
 
 class PostgresAdapterTests(unittest.TestCase):
@@ -19,6 +25,38 @@ class PostgresAdapterTests(unittest.TestCase):
         self.assertIn("ON CONFLICT (report_date)", translated)
         self.assertNotIn("INSERT OR REPLACE", translated)
         self.assertIn("%s", translated)
+
+    def test_returning_insert_keeps_id_without_mutating_cursor(self) -> None:
+        class SlotsCursor:
+            __slots__ = ("rowcount", "_rows")
+
+            def __init__(self) -> None:
+                self.rowcount = 1
+                self._rows = [{"id": 21}]
+
+            def execute(self, sql: str, params: tuple) -> None:
+                return None
+
+            def fetchone(self) -> dict | None:
+                if not self._rows:
+                    return None
+                return self._rows.pop(0)
+
+            def fetchall(self) -> list:
+                return []
+
+        class FakeConnection:
+            def cursor(self, row_factory=None):
+                return SlotsCursor()
+
+        result = PgConnection(FakeConnection()).execute(
+            """
+            INSERT INTO operation_period (period_type, start_date, end_date, note, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            ("harvest_season", "2025-11-03", "2025-12-31", None, "2026-10-20"),
+        )
+        self.assertEqual(result.lastrowid, 21)
 
     def test_translate_operation_period_returning(self) -> None:
         sql = """

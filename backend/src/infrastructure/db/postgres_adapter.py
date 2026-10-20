@@ -45,9 +45,9 @@ class PgRow:
 class PgExecuteResult:
     __slots__ = ("_cursor", "lastrowid", "rowcount")
 
-    def __init__(self, cursor: psycopg.Cursor) -> None:
+    def __init__(self, cursor: psycopg.Cursor, lastrowid: int | None = None) -> None:
         self._cursor = cursor
-        self.lastrowid = getattr(cursor, "_imc_lastrowid", None)
+        self.lastrowid = lastrowid
         self.rowcount = cursor.rowcount
 
     def fetchone(self) -> PgRow | None:
@@ -178,11 +178,12 @@ class PgConnection:
         bound = adapt_params(translated, params or ())
         cursor = self._conn.cursor(row_factory=dict_row)
         cursor.execute(translated, bound)
+        lastrowid = None
         if "RETURNING id" in translated:
             row = cursor.fetchone()
             if row:
-                cursor._imc_lastrowid = row["id"]  # type: ignore[attr-defined]
-        return PgExecuteResult(cursor)
+                lastrowid = row["id"]
+        return PgExecuteResult(cursor, lastrowid)
 
     def commit(self) -> None:
         self._conn.commit()
