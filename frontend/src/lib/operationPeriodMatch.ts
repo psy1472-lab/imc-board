@@ -4,6 +4,7 @@ const PERIOD_TYPE_ORDER: OperationPeriodType[] = [
   "post_shopping_discount",
   "special_communication",
   "no_parcel_day",
+  "harvest_season",
 ];
 
 export function isDateInOperationPeriod(date: string, period: OperationPeriod): boolean {
@@ -31,4 +32,5 @@ export const OPERATION_PERIOD_STATUS: Record<OperationPeriodType, string> = {
   post_shopping_discount: "CAUTION",
   special_communication: "WARNING",
   no_parcel_day: "CRITICAL",
+  harvest_season: "CAUTION",
 };

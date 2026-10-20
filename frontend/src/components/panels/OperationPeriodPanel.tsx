@@ -6,7 +6,7 @@ import {
   fetchOperationPeriods,
   updateOperationPeriod,
 } from "../../lib/api";
-import { formatDateWithWeekday } from "../../lib/dateFormat";
+import { formatNamedPeriodLabel } from "../../lib/operationPeriodLabel";
 import {
   OPERATION_PERIOD_DESCRIPTIONS,
   OPERATION_PERIOD_LABELS,
@@ -18,14 +18,8 @@ const PERIOD_TYPES: OperationPeriodType[] = [
   "post_shopping_discount",
   "special_communication",
   "no_parcel_day",
+  "harvest_season",
 ];
-
-function formatPeriodRange(startDate: string, endDate: string) {
-  if (startDate === endDate) {
-    return formatDateWithWeekday(startDate);
-  }
-  return `${formatDateWithWeekday(startDate)} ~ ${formatDateWithWeekday(endDate)}`;
-}
 
 function inputStyle(
   palette: ReturnType<typeof useTheme>["palette"],
@@ -71,6 +65,7 @@ export function OperationPeriodPanel() {
       post_shopping_discount: [],
       special_communication: [],
       no_parcel_day: [],
+      harvest_season: [],
     };
     periods.forEach((period) => {
       groups[period.periodType].push(period);
@@ -239,7 +234,7 @@ export function OperationPeriodPanel() {
       <div style={{ marginBottom: 16 }}>
         <h3 style={{ margin: "0 0 6px", fontSize: 18 }}>운영 특이 일정</h3>
         <p style={{ margin: 0, color: palette.muted, fontSize: 13, lineHeight: 1.6 }}>
-          우체국쇼핑대전, 특별소통기간, 위탁배달원 하계 휴식기간 등 물량·소통 분석 시 참고할 일정을 등록합니다.
+          우체국쇼핑대전, 특별소통기간, 위탁배달원 하계 휴식기간, 농산물 수확기(가을걷이) 등 물량·소통 분석 시 참고할 일정을 등록합니다.
         </p>
       </div>
 
@@ -445,7 +440,12 @@ export function OperationPeriodPanel() {
                     >
                       <div>
                         <div style={{ fontSize: 14, fontWeight: 600 }}>
-                          {formatPeriodRange(period.startDate, period.endDate)}
+                          {formatNamedPeriodLabel(
+                            period.startDate,
+                            period.endDate,
+                            period.note,
+                            period.periodType,
+                          )}
                         </div>
                         {period.note ? (
                           <div style={{ marginTop: 4, fontSize: 12, color: palette.muted }}>

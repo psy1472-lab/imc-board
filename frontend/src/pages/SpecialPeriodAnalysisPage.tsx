@@ -8,6 +8,8 @@ import { useRequestGeneration } from "../hooks/useRequestGeneration";
 import { fetchSpecialPeriodAnalysis } from "../lib/api";
 import { chartColors } from "../lib/chartColors";
 import { formatDateWithWeekday } from "../lib/dateFormat";
+import { formatNamedPeriodLabel } from "../lib/operationPeriodLabel";
+import { OPERATION_PERIOD_LABELS, type OperationPeriodType } from "../types/operationPeriod";
 import { formatNumber } from "../styles/theme";
 import { panelAltStyle } from "../styles/panel";
 import type {
@@ -57,8 +59,15 @@ function formatChange(percent: number | null) {
   return `${arrow} 전년 대비 ${sign}${percent.toFixed(1)}%`;
 }
 
+function periodTypeLabel(periodType: string) {
+  if (periodType in OPERATION_PERIOD_LABELS) {
+    return OPERATION_PERIOD_LABELS[periodType as OperationPeriodType];
+  }
+  return periodType;
+}
+
 function periodOptionLabel(period: SpecialPeriodOption) {
-  return `${period.startDate} ~ ${period.endDate}`;
+  return formatNamedPeriodLabel(period.startDate, period.endDate, period.note, period.periodType);
 }
 
 function FilterToggleGroup<T extends string>({
@@ -258,8 +267,8 @@ export default function SpecialPeriodAnalysisPage() {
     return (
       <PageState
         empty
-        emptyTitle="등록된 특별소통기간이 없습니다"
-        emptyDescription="시스템 관리 또는 보고서 화면에서 특별소통기간을 등록한 뒤 다시 확인해 주세요."
+        emptyTitle="등록된 분석 기간이 없습니다"
+        emptyDescription="보고서 화면에서 특별소통기간 또는 농산물 수확기(가을걷이)를 등록한 뒤 다시 확인해 주세요."
       />
     );
   }
@@ -296,7 +305,7 @@ export default function SpecialPeriodAnalysisPage() {
       >
         <div style={{ display: "grid", gap: 8, color: palette.muted, fontSize: 13, lineHeight: 1.6 }}>
           <div>
-            올해 기간 {formatDateWithWeekday(current.startDate)} ~ {formatDateWithWeekday(current.endDate)} (
+            올해 기간 {periodTypeLabel(current.periodType)} {formatDateWithWeekday(current.startDate)} ~ {formatDateWithWeekday(current.endDate)} (
             {current.lengthDays}일)
           </div>
           <div>
@@ -305,12 +314,15 @@ export default function SpecialPeriodAnalysisPage() {
           </div>
           {prior ? (
             <div>
-              전년 기간 {formatDateWithWeekday(prior.startDate)} ~ {formatDateWithWeekday(prior.endDate)} (
+              전년 기간 {periodTypeLabel(prior.periodType)} {formatDateWithWeekday(prior.startDate)} ~ {formatDateWithWeekday(prior.endDate)} (
               {prior.lengthDays}일) · 창 {formatDateWithWeekday(prior.windowStart)} ~{" "}
               {formatDateWithWeekday(prior.windowEnd)}
             </div>
           ) : null}
-          <div>일별 값은 달력이 아니라 기간 시작일 기준 오프셋(D-7~)으로 맞춥니다. 비교 기준은 전년 특별소통기간입니다.</div>
+          <div>
+            일별 값은 달력이 아니라 기간 시작일 기준 오프셋(D-7~)으로 맞춥니다. 비교 기준은 전년{" "}
+            {periodTypeLabel(current.periodType)}입니다.
+          </div>
         </div>
       </Panel>
 
@@ -360,7 +372,7 @@ export default function SpecialPeriodAnalysisPage() {
           periodEndLabel={periodEndLabel}
         />
         <div style={{ marginTop: 8, color: palette.muted, fontSize: 12 }}>
-          배경은 올해 등록 특별소통기간입니다. 보고서가 없는 날은 비워 둡니다.
+          배경은 올해 선택한 등록 기간입니다. 보고서가 없는 날은 비워 둡니다.
         </div>
       </Panel>
 

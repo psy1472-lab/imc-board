@@ -2733,7 +2733,11 @@ class SqliteRepository:
         current = select_special_period(periods, period_id=period_id, reference_date=ref)
         daily_by_date: dict[str, dict] = {}
         if current:
-            prior = match_prior_year_period(current, periods)
+            prior = match_prior_year_period(
+                current,
+                periods,
+                period_type=current.get("periodType") or "special_communication",
+            )
             windows = [expand_period_window(current)]
             if prior:
                 windows.append(expand_period_window(prior))

@@ -1,7 +1,8 @@
 export type OperationPeriodType =
   | "post_shopping_discount"
   | "special_communication"
-  | "no_parcel_day";
+  | "no_parcel_day"
+  | "harvest_season";
 
 export type OperationPeriod = {
   id: number;
@@ -16,10 +17,12 @@ export const OPERATION_PERIOD_LABELS: Record<OperationPeriodType, string> = {
   post_shopping_discount: "우체국쇼핑대전",
   special_communication: "특별소통기간",
   no_parcel_day: "위탁배달원 하계 휴식기간",
+  harvest_season: "농산물 수확기(가을걷이)",
 };
 
 export const OPERATION_PERIOD_DESCRIPTIONS: Record<OperationPeriodType, string> = {
   post_shopping_discount: "우체국쇼핑대전 기간",
   special_communication: "물량·소통 분석 시 참고할 특별 소통 기간",
   no_parcel_day: "위탁배달원 하계 휴식 기간(물량·소통 분석 참고)",
+  harvest_season: "농산물 수확기(가을걷이) 기간. 물량·소통 분석 시 참고할 일정",
 };

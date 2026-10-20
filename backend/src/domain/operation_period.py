@@ -6,9 +6,14 @@ OPERATION_PERIOD_LABELS: dict[str, str] = {
     "post_shopping_discount": "우체국쇼핑대전",
     "special_communication": "특별소통기간",
     "no_parcel_day": "위탁배달원 하계 휴식기간",
+    "harvest_season": "농산물 수확기(가을걷이)",
 }
 
-SPECIAL_COMMUNICATION_PERIOD_TYPES = frozenset({"special_communication", "post_shopping_discount"})
+SPECIAL_COMMUNICATION_PERIOD_TYPES = frozenset({
+    "special_communication",
+    "post_shopping_discount",
+    "harvest_season",
+})
 SPECIAL_PERIOD_BLEND_WEIGHT = 0.5
 
 
@@ -234,9 +239,11 @@ def apply_operation_period_volume_adjustment(
 
 
 SPECIAL_PERIOD_ANALYSIS_TYPE = "special_communication"
+SPECIAL_PERIOD_ANALYSIS_TYPES = frozenset({SPECIAL_PERIOD_ANALYSIS_TYPE, "harvest_season"})
 SPECIAL_PERIOD_WINDOW_PAD_DAYS = 7
 SPECIAL_PERIOD_PRIOR_MISSING_MESSAGE = "전년 특별소통기간이 등록되지 않았습니다"
-SPECIAL_PERIOD_NONE_REGISTERED_MESSAGE = "등록된 특별소통기간이 없습니다."
+SPECIAL_PERIOD_HARVEST_PRIOR_MISSING_MESSAGE = "전년 농산물 수확기(가을걷이)가 등록되지 않았습니다"
+SPECIAL_PERIOD_NONE_REGISTERED_MESSAGE = "등록된 특별소통기간 또는 농산물 수확기(가을걷이)가 없습니다."
 _MACHINE_STREAMS = ("dispatch", "arrival")
 _MACHINE_DECKS = (1, 2, 3)
 
@@ -289,14 +296,21 @@ def match_prior_year_period(
     return candidates[0][2]
 
 
+def prior_year_missing_message(period_type: str) -> str:
+    if period_type == "harvest_season":
+        return SPECIAL_PERIOD_HARVEST_PRIOR_MISSING_MESSAGE
+    return SPECIAL_PERIOD_PRIOR_MISSING_MESSAGE
+
+
 def select_special_period(
     periods: list[dict],
     *,
     period_id: int | None = None,
     reference_date: date | None = None,
-    period_type: str = SPECIAL_PERIOD_ANALYSIS_TYPE,
+    period_type: str | None = None,
 ) -> dict | None:
-    special = [period for period in periods if period.get("periodType") == period_type]
+    allowed = {period_type} if period_type else SPECIAL_PERIOD_ANALYSIS_TYPES
+    special = [period for period in periods if period.get("periodType") in allowed]
     if period_id is not None:
         for period in special:
             if period.get("id") == period_id:
@@ -438,7 +452,7 @@ def build_special_period_analysis(
     period_id: int | None = None,
     reference_date: date | None = None,
 ) -> dict:
-    special = [period for period in periods if period.get("periodType") == SPECIAL_PERIOD_ANALYSIS_TYPE]
+    special = [period for period in periods if period.get("periodType") in SPECIAL_PERIOD_ANALYSIS_TYPES]
     available = [
         {
             "id": period.get("id"),
@@ -479,7 +493,11 @@ def build_special_period_analysis(
             "kpi": None,
         }
 
-    prior = match_prior_year_period(current, periods)
+    prior = match_prior_year_period(
+        current,
+        periods,
+        period_type=current.get("periodType") or SPECIAL_PERIOD_ANALYSIS_TYPE,
+    )
     current_start = date.fromisoformat(current["startDate"])
     prior_start = date.fromisoformat(prior["startDate"]) if prior else None
     current_length = period_length_days(current)
@@ -617,7 +635,9 @@ def build_special_period_analysis(
         "currentPeriod": _period_public(current),
         "priorPeriod": _period_public(prior) if prior else None,
         "priorMissing": prior is None,
-        "message": SPECIAL_PERIOD_PRIOR_MISSING_MESSAGE if prior is None else None,
+        "message": prior_year_missing_message(current.get("periodType") or SPECIAL_PERIOD_ANALYSIS_TYPE)
+        if prior is None
+        else None,
         "series": series,
         "kpi": kpi,
     }

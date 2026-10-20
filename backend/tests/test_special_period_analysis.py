@@ -2,6 +2,7 @@ import unittest
 from datetime import date
 
 from domain.operation_period import (
+    SPECIAL_PERIOD_HARVEST_PRIOR_MISSING_MESSAGE,
     SPECIAL_PERIOD_NONE_REGISTERED_MESSAGE,
     SPECIAL_PERIOD_PRIOR_MISSING_MESSAGE,
     build_special_period_analysis,
@@ -73,6 +74,14 @@ class SpecialPeriodMatchingTests(unittest.TestCase):
         ]
         selected = select_special_period(periods, reference_date=date(2026, 3, 1))
         self.assertEqual(selected["id"], 2)
+
+    def test_select_period_includes_harvest_covering_reference_date(self):
+        periods = [
+            period(2, "2026-02-06", "2026-02-20"),
+            period(3, "2026-10-01", "2026-10-20", "harvest_season"),
+        ]
+        selected = select_special_period(periods, reference_date=date(2026, 10, 5))
+        self.assertEqual(selected["id"], 3)
 
 
 class SpecialPeriodAlignmentTests(unittest.TestCase):
@@ -172,6 +181,34 @@ class SpecialPeriodAlignmentTests(unittest.TestCase):
         self.assertIsNone(quota_compliance_rate(10, 0))
         self.assertIsNone(quota_compliance_rate(None, 10))
         self.assertEqual(yoy_change_percent(150.0, 80.0), 87.5)
+
+    def test_harvest_period_compares_with_prior_harvest_only(self):
+        current_special = period(2, "2026-09-14", "2026-09-29")
+        harvest = period(3, "2026-10-01", "2026-10-20", "harvest_season")
+        prior_harvest = period(1, "2025-10-01", "2025-10-15", "harvest_season")
+        prior_special = period(4, "2025-09-22", "2025-10-14")
+        payload = build_special_period_analysis(
+            [current_special, harvest, prior_harvest, prior_special],
+            {
+                "2026-10-01": {"totalVolume": 100.0},
+                "2025-10-01": {"totalVolume": 80.0},
+            },
+            period_id=3,
+        )
+        available_ids = [item["id"] for item in payload["availablePeriods"]]
+        self.assertEqual(available_ids, [3, 2, 1, 4])
+        self.assertEqual(payload["currentPeriod"]["periodType"], "harvest_season")
+        self.assertEqual(payload["priorPeriod"]["id"], 1)
+        self.assertFalse(payload["priorMissing"])
+        same_year_ids = [item["id"] for item in payload["sameYearPeriods"]]
+        self.assertEqual(same_year_ids, [3, 2])
+
+    def test_harvest_without_prior_harvest_does_not_use_special_period(self):
+        harvest = period(3, "2026-10-01", "2026-10-20", "harvest_season")
+        prior_special = period(4, "2025-09-22", "2025-10-14")
+        payload = build_special_period_analysis([harvest, prior_special], {}, period_id=3)
+        self.assertIsNone(payload["priorPeriod"])
+        self.assertEqual(payload["message"], SPECIAL_PERIOD_HARVEST_PRIOR_MISSING_MESSAGE)
 
 
 if __name__ == "__main__":

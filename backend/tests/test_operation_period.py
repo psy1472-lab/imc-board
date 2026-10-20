@@ -100,6 +100,55 @@ class OperationPeriodTests(unittest.TestCase):
         self.assertLess(adjusted, 500.0)
         self.assertGreater(adjusted, 400.0)
 
+    def test_shopping_and_harvest_use_special_period_blend(self):
+        volume_by_date = {
+            "2025-02-11": 400.0,
+            "2025-02-12": 420.0,
+            "2025-02-13": 410.0,
+        }
+        cases = (
+            ("post_shopping_discount", "우체국쇼핑대전"),
+            ("harvest_season", "농산물 수확기(가을걷이)"),
+        )
+        for period_type, label in cases:
+            with self.subTest(period_type=period_type):
+                periods = [
+                    {
+                        "periodType": period_type,
+                        "startDate": "2026-02-10",
+                        "endDate": "2026-02-12",
+                    },
+                    {
+                        "periodType": period_type,
+                        "startDate": "2025-02-11",
+                        "endDate": "2025-02-13",
+                    },
+                ]
+                adjusted, labels = apply_operation_period_volume_adjustment(
+                    500.0,
+                    date(2026, 2, 10),
+                    periods,
+                    volume_by_date=volume_by_date,
+                    before_date=date(2026, 2, 10),
+                )
+                self.assertEqual(labels, (label,))
+                self.assertLess(adjusted, 500.0)
+                self.assertGreater(adjusted, 400.0)
+                self.assertEqual(
+                    classify_forecast_period_category(date(2026, 2, 10), periods),
+                    "special",
+                )
+                self.assertEqual(
+                    resolve_special_communication_flag(
+                        0,
+                        "weekday",
+                        "standard",
+                        date(2026, 2, 10),
+                        periods,
+                    ),
+                    1,
+                )
+
     def test_compute_historical_no_parcel_avg(self):
         periods = [
             {
