@@ -110,18 +110,74 @@ class DailyKpiExtractor:
             remaining_volume, remaining_raw = parse_volume(match.group(4).strip().rstrip("*").strip())
         else:
             remaining_volume, remaining_raw = self._infer_remaining_volume(text)
+        arrival_volume, arrival_raw, header_arrival_raw = self._prefer_hourly_arrival_subtotal(
+            text,
+            total_volume,
+            dispatch_volume,
+            arrival_volume,
+            arrival_raw,
+        )
+        raw_values = {
+            "total_volume": total_raw,
+            "dispatch_volume": dispatch_raw,
+            "arrival_volume": arrival_raw,
+            "remaining_volume": remaining_raw,
+        }
+        if header_arrival_raw:
+            raw_values["arrival_volume_header"] = header_arrival_raw
         return (
             total_volume,
             dispatch_volume,
             arrival_volume,
             remaining_volume,
-            {
-                "total_volume": total_raw,
-                "dispatch_volume": dispatch_raw,
-                "arrival_volume": arrival_raw,
-                "remaining_volume": remaining_raw,
-            },
+            raw_values,
         )
+
+    def _prefer_hourly_arrival_subtotal(
+        self,
+        text: str,
+        total_volume: int | None,
+        dispatch_volume: int | None,
+        arrival_volume: int | None,
+        arrival_raw: str | None,
+    ) -> tuple[int | None, str | None, str | None]:
+        """표지 도착이 총량과 어긋나고 시간대별 도착 합계가 총량과 맞으면 합계를 쓴다.
+
+        2026-10-22처럼 표지에는 '도착: 8.9만개'로 적혀 있고
+        시간대별 도착 합계와 대상물량 표는 8.6만인 경우를 구분한다.
+        표지가 이미 발송+도착=총량이면 표지 값을 유지한다.
+        """
+        if (
+            total_volume is None
+            or dispatch_volume is None
+            or arrival_volume is None
+            or dispatch_volume + arrival_volume == total_volume
+        ):
+            return arrival_volume, arrival_raw, None
+
+        subtotal = self._hourly_arrival_subtotal(text)
+        if subtotal is None:
+            return arrival_volume, arrival_raw, None
+        volume, raw = subtotal
+        if dispatch_volume + volume != total_volume or volume == arrival_volume:
+            return arrival_volume, arrival_raw, None
+        return volume, raw, arrival_raw
+
+    def _hourly_arrival_subtotal(self, text: str) -> tuple[int, str] | None:
+        section = self._extract_hourly_section(text)
+        match = self._match_hour_row(section, "arrival")
+        if not match:
+            return None
+        values = [value for value in self._parse_hour_row(match.group(1)) if value is not None]
+        if len(values) < 2:
+            return None
+        hours = [self._to_volume(value) or 0 for value in values[:-1]]
+        last = self._to_volume(values[-1])
+        if last is None or not any(hours) or sum(hours) != last:
+            return None
+        token = values[-1]
+        raw = token if "만" in token else f"{token}만"
+        return last, raw
 
     def _infer_remaining_volume(self, text: str) -> tuple[int | None, str | None]:
         summary = re.search(r"계\s+[\d.]+\s+[\d.]+\s+[\d.]+\s+([\d.]+)\s+전국접수물량", text)

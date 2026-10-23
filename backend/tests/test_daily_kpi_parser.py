@@ -585,6 +585,33 @@ def test_extract_standard_kpi_no_remaining_field():
     assert summary.remaining_volume == 30000
 
 
+HEADER_ARRIVAL_TYPO_SNIPPET = """
+중부권IMC 일일소통현황 보고('26.10.22.목)
+소통실적 : 29.8만개(발송: 21.2만개, 도착: 8.9만개, 잔량: 0만)
+시간대별 처리 및 인력투입 현황
+구 분 ~18 18~ 19~ 20~ 21~ 22~ 23~ 0~ 1~ 2~ 3~ 4~ 5~ 6~ 합계
+발송 - 2.1 3.0 3.3 3.6 3.2 4.1 1.7 0.2 - - - - - 21.2
+처리
+물량 도착 - - - - - - - 1.4 3.6 3.3 0.3 - - - 8.6
+(단위:만개) 계 - 2.1 3.0 3.3 3.6 3.2 4.1 3.1 3.8 3.3 0.3 - - - 29.8
+"""
+
+
+def test_header_arrival_uses_hourly_subtotal_when_cover_line_breaks_total():
+    extractor = DailyKpiExtractor()
+    document = PdfDocument(
+        path="26.10.22.pdf",
+        pages=[PdfPage(index=0, text=HEADER_ARRIVAL_TYPO_SNIPPET, tables=[])],
+    )
+    _, _, summary = extractor.extract(document)
+    assert summary.total_volume == 298000
+    assert summary.dispatch_volume == 212000
+    assert summary.arrival_volume == 86000
+    assert summary.raw_values["arrival_volume"] == "8.6만"
+    assert summary.raw_values["arrival_volume_header"] == "8.9만개"
+    assert summary.dispatch_volume + summary.arrival_volume == summary.total_volume
+
+
 def test_extract_title_date_with_spaces():
     from tests.fixtures.failed_upload_snippets import TITLE_DATE_SPACED
 
