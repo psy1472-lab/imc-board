@@ -5,14 +5,13 @@ import { ValidationStatusBadge } from "../components/header/ValidationStatusBadg
 import { OperationPeriodPanel } from "../components/panels/OperationPeriodPanel";
 import {
   deleteReport,
-  fetchDailyBriefing,
-  fetchDashboardSummary,
   fetchReportValidation,
   fetchReports,
   reportFileUrl,
+  reportJsonDownloadUrl,
   uploadReport,
 } from "../lib/api";
-import { downloadCsv, downloadJson } from "../lib/download";
+import { downloadCsv } from "../lib/download";
 import { formatDateWithWeekday } from "../lib/dateFormat";
 import { formatReportFormat } from "../lib/reportFormat";
 import {
@@ -120,7 +119,6 @@ export default function ReportsPage() {
     total: number;
     fileName: string;
   } | null>(null);
-  const [exporting, setExporting] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [selectedReportDates, setSelectedReportDates] = useState<Set<string>>(() => new Set());
   const [validationModal, setValidationModal] = useState<{
@@ -347,30 +345,6 @@ export default function ReportsPage() {
 
     setMessage(`${succeeded.length}건 수집 완료. 검증 실패 ${failCount}건, 주의 ${warnCount}건.`);
     setError(`실패 ${failed.length}건: ${failed.map((item) => `${item.file} (${item.error})`).join(" / ")}`);
-  };
-
-  const handleExportBriefing = async (reportDate: string) => {
-    setExporting(`briefing-${reportDate}`);
-    try {
-      const data = await fetchDailyBriefing(reportDate, compare);
-      downloadJson(`imc-briefing-${reportDate}.json`, data);
-    } catch {
-      setError("브리핑 JSON보내기에 실패했습니다.");
-    } finally {
-      setExporting(null);
-    }
-  };
-
-  const handleExportSummary = async (reportDate: string) => {
-    setExporting(`summary-${reportDate}`);
-    try {
-      const data = await fetchDashboardSummary(reportDate, compare);
-      downloadJson(`imc-summary-${reportDate}.json`, data);
-    } catch {
-      setError("대시보드 요약 JSON보내기에 실패했습니다.");
-    } finally {
-      setExporting(null);
-    }
   };
 
   const handleDeleteSelectedReports = async () => {
@@ -940,22 +914,20 @@ export default function ReportsPage() {
                           ) : (
                             <span style={{ color: palette.muted, fontSize: 12 }}>PDF 없음</span>
                           )}
-                          <button
-                            type="button"
-                            style={actionButtonStyle(palette)}
-                            disabled={exporting === `briefing-${report.reportDate}`}
-                            onClick={() => void handleExportBriefing(report.reportDate)}
+                          <a
+                            href={reportJsonDownloadUrl("briefing", report.reportDate, compare)}
+                            download={`imc-briefing-${report.reportDate}.json`}
+                            style={{ ...actionButtonStyle(palette), textDecoration: "none" }}
                           >
                             브리핑 JSON
-                          </button>
-                          <button
-                            type="button"
-                            style={actionButtonStyle(palette)}
-                            disabled={exporting === `summary-${report.reportDate}`}
-                            onClick={() => void handleExportSummary(report.reportDate)}
+                          </a>
+                          <a
+                            href={reportJsonDownloadUrl("summary", report.reportDate, compare)}
+                            download={`imc-summary-${report.reportDate}.json`}
+                            style={{ ...actionButtonStyle(palette), textDecoration: "none" }}
                           >
                             요약 JSON
-                          </button>
+                          </a>
                         </div>
                       </td>
                     </tr>

@@ -310,11 +310,17 @@ def dashboard_header(date: str = Query(..., description="YYYY-MM-DD")):
     return response
 
 
+def _as_attachment(response: Response, filename: str) -> Response:
+    response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
 @app.get("/api/dashboard/briefing")
 def daily_briefing(
     date: str = Query(..., description="YYYY-MM-DD"),
     compare: str = Query("prev_day"),
     sections: str = Query("all", description="all | core | forecast"),
+    download: bool = Query(False, description="Return the JSON as a file download"),
 ):
     if sections not in {"all", "core", "forecast"}:
         raise HTTPException(status_code=400, detail="sections must be all, core, or forecast")
@@ -323,6 +329,8 @@ def daily_briefing(
         raise HTTPException(status_code=404, detail="report not found")
     response = JSONResponse(payload)
     response.headers["Cache-Control"] = REPORT_CACHE_CONTROL
+    if download:
+        _as_attachment(response, f"imc-briefing-{date}.json")
     return response
 
 
@@ -331,19 +339,25 @@ def dashboard_summary(
     request: Request,
     date: str = Query(..., description="YYYY-MM-DD"),
     compare: str = Query("prev_day"),
+    download: bool = Query(False, description="Return the JSON as a file download"),
 ):
     ingested_at = repository.get_report_ingested_at(date)
     revision = repository.get_dashboard_cache_revision(date)
     etag = build_report_etag(date, f"{compare}:live-prev-kpi:{revision}", ingested_at)
     if if_none_match_matches(request.headers.get("if-none-match"), etag):
-        return Response(
+        response = Response(
             status_code=304,
             headers={"ETag": etag, "Cache-Control": REPORT_CACHE_CONTROL},
         )
+        if download:
+            _as_attachment(response, f"imc-summary-{date}.json")
+        return response
     payload = repository.get_dashboard_summary(date, compare)
     if not payload:
         raise HTTPException(status_code=404, detail="report not found")
     response = JSONResponse(payload)
     response.headers["Cache-Control"] = REPORT_CACHE_CONTROL
     response.headers["ETag"] = etag
+    if download:
+        _as_attachment(response, f"imc-summary-{date}.json")
     return response

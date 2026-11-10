@@ -382,7 +382,14 @@ export function OperationPeriodPanel() {
       ) : periods.length === 0 ? (
         <div style={{ color: palette.muted, fontSize: 13 }}>등록된 운영 특이 일정이 없습니다.</div>
       ) : (
-        <div style={{ display: "grid", gap: 12 }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+            gap: 12,
+            alignItems: "start",
+          }}
+        >
           {PERIOD_TYPES.map((type) => {
             const items = groupedPeriods[type];
             if (items.length === 0) return null;

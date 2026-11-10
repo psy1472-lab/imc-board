@@ -216,6 +216,23 @@ export function reportFileUrl(reportDate: string) {
   return `${API_BASE}/api/reports/${reportDate}/file`;
 }
 
+export function reportJsonDownloadUrl(
+  kind: "briefing" | "summary",
+  reportDate: string,
+  compare = "prev_day",
+) {
+  const params = new URLSearchParams({
+    date: reportDate,
+    compare,
+    download: "1",
+  });
+  if (kind === "briefing") {
+    params.set("sections", "all");
+  }
+  const path = kind === "briefing" ? "/api/dashboard/briefing" : "/api/dashboard/summary";
+  return `${API_BASE}${path}?${params.toString()}`;
+}
+
 export async function deleteReport(
   reportDate: string,
   deleteFile = true,
